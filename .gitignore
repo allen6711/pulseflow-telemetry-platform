@@ -1,0 +1,23 @@
+# Binaries
+/bin/
+/dist/
+*.exe
+
+# Go
+*.test
+*.out
+coverage.*
+
+# Env & secrets
+.env
+.env.local
+*.pem
+
+# Benchmark raw output (keep summaries, ignore huge dumps)
+benchmarks/raw/*.jsonl
+benchmarks/raw/*.csv
+
+# macOS / editors
+.DS_Store
+.idea/
+.vscode/
