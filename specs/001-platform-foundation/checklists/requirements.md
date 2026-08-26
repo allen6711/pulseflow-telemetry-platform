@@ -33,8 +33,8 @@
 
 **Validation iterations**: 1 (all items passed on the first pass)
 
-**Counts**: 6 user stories (2x P1, 2x P2, 2x P3), 9 edge cases, 36 functional requirements
-(FR-001 through FR-036, numbering continuous with no gaps), 10 success criteria
+**Counts**: 6 user stories (2x P1, 2x P2, 2x P3), 9 edge cases, 37 functional requirements
+(FR-001 through FR-037, numbering continuous with no gaps), 10 success criteria
 (SC-001 through SC-010), 0 `[NEEDS CLARIFICATION]` markers.
 
 **Basis for passing "no implementation details"** (worth stating, since this is an infrastructure

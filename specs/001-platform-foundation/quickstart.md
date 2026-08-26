@@ -247,7 +247,7 @@ Confirm the pipeline actually blocks by pushing a branch with each defect class 
 compilation error, a lint violation, and a failing unit test — and checking that CI fails and names
 the offending item (SC-009).
 
-### V8 — Startup with dependencies absent (edge case · FR-011)
+### V8 — Startup with dependencies absent (edge case · FR-037)
 
 ```bash
 make down
@@ -283,5 +283,5 @@ curl -s localhost:8080/v1/health/ready | jq '.status'    # becomes "ready" on it
 | 7 | Every log line parses, with all required fields | FR-024–030 · SC-007, SC-008 |
 | 8 | Both services expose `/metrics`; Prometheus scrapes both | FR-031–033 |
 | 9 | `make check` matches CI and blocks all three defect classes | FR-034–036 · SC-009 |
-| 10 | Services start with dependencies down and self-heal | FR-011 · edge case |
+| 10 | Services start with dependencies down and self-heal | FR-037 · FR-011 |
 | 11 | Unit tests pass with no dependencies; integration tests pass against compose | Constitution II |

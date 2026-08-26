@@ -63,7 +63,7 @@ probes differ in their responses. That fully tests this story.
 2. **Given** the analytical storage service is stopped, **When** the readiness probe is queried, **Then** it responds with a service-unavailable status and the response body explicitly identifies analytical storage as the failing dependency.
 3. **Given** the analytical storage service is stopped, **When** the liveness probe is queried, **Then** it still responds with success.
 4. **Given** several dependencies are unavailable at once, **When** the readiness probe is queried, **Then** the response lists **all** failing dependencies, not just the first one encountered.
-5. **Given** a dependency recovers, **When** the readiness probe is queried again, **Then** it returns to success within an acceptable interval, with no service restart required.
+5. **Given** a dependency recovers, **When** the readiness probe is queried again, **Then** it returns to success within 10 seconds, with no service restart required.
 6. **Given** a dependency is responding slowly, **When** the readiness probe is queried, **Then** the probe responds within its configured timeout rather than waiting indefinitely.
 
 ---
@@ -176,7 +176,7 @@ observe whether the pipeline blocks it.
   additional load on them (result caching or a minimum re-check interval is required).
 - Dependencies are not yet ready when the service starts (container startup race) → the service
   itself must still start successfully and report not-ready, rather than failing to start, and must
-  become ready automatically once dependencies are up.
+  become ready automatically once dependencies are up (FR-037).
 - A termination signal arrives before startup has completed → the service must safely abort startup
   and exit, leaving no half-initialized state.
 - Two termination signals arrive in succession → the second must trigger immediate exit rather than
@@ -245,6 +245,10 @@ observe whether the pipeline blocks it.
 - **FR-034**: The system MUST automatically run build, static analysis, and unit tests when a change is submitted.
 - **FR-035**: Failure of any automated check MUST cause that verification run to report failure and identify the failing item and its location.
 - **FR-036**: The checks run by the automated pipeline MUST be fully reproducible by a developer locally through a single command.
+
+**Startup Resilience**
+
+- **FR-037**: When one or more dependencies are unavailable at startup, a service MUST still start successfully and report not-ready, MUST NOT exit, and MUST become ready automatically once the dependencies are available, without operator intervention.
 
 ### Key Entities
 

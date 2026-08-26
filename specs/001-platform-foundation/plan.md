@@ -52,7 +52,7 @@ round per 1s window (FR-009, FR-010) · shutdown grace period 30s default (FR-02
 cardinality bounded, no `event_id` or user-controlled strings as labels (Principle I) · all
 container images pinned to explicit patch tags (FR-003)
 
-**Scale/Scope**: 6 user stories, 36 functional requirements, 10 success criteria. Roughly 6 internal
+**Scale/Scope**: 6 user stories, 37 functional requirements, 10 success criteria. Roughly 6 internal
 packages, 2 binaries, 1 compose file, 1 Makefile, 1 CI workflow. No persistent data, no external
 consumers yet
 
@@ -74,7 +74,12 @@ Evaluated against `.specify/memory/constitution.md` v1.0.1.
 | Graceful shutdown | — (bounded lifecycle event, covered by logs) | `shutdown_started`, `shutdown_complete`, `shutdown_timeout` |
 
 Label cardinality: `route` uses the registered `ServeMux` pattern, never the raw path;
-`dependency` is one of three fixed values. Both bounded. **PASS** (R-010)
+`dependency` is one of three fixed values. Both bounded.
+
+The `trace_id` mechanism ships in the Foundational phase, before any instrumented path, so
+every intermediate merge point satisfies this principle rather than only the feature's end
+state. The request-facing contract on top of it (`traceparent` adoption, level filtering,
+the stable event vocabulary) belongs to US5. **PASS** (R-008, R-010)
 
 ### Principle II — Layered Testing (NON-NEGOTIABLE)
 
@@ -166,30 +171,49 @@ cmd/
 
 internal/
 ├── config/
-│   ├── config.go                # Typed settings, defaults, sensitive-field masking
-│   ├── parse.go                 # Typed getters, multi-error accumulation
-│   └── config_test.go
+│   ├── config.go                # Typed settings and defaults
+│   ├── parse.go                 # Typed getters
+│   ├── validate.go              # Per-field and cross-field rules
+│   ├── errors.go                # Multi-error accumulation, FR-016 message shape
+│   ├── mask.go                  # Sensitive-field masking
+│   ├── validate_test.go
+│   ├── errors_test.go
+│   ├── crossfield_test.go
+│   └── mask_test.go
 ├── logging/
-│   ├── logger.go                # slog JSON handler + service/version attributes
+│   ├── logger.go                # slog JSON handler, service/version attrs, configured level
 │   ├── context.go               # Correlation ID in context; traceparent adoption
 │   ├── handler.go               # Context-aware handler injecting trace_id
-│   └── logging_test.go
+│   ├── sanitize.go              # Strips credentials from driver errors before logging
+│   ├── logger_test.go
+│   ├── context_test.go
+│   ├── handler_test.go
+│   ├── record_test.go
+│   └── sanitize_test.go
 ├── observability/
 │   ├── registry.go              # Non-global prometheus.Registry, build_info
 │   ├── httpmetrics.go           # Route-labelled request counter and histogram
-│   └── observability_test.go
+│   └── depmetrics.go            # Dependency up gauge and check duration histogram
 ├── health/
-│   ├── checker.go               # Checker interface; per-dependency implementations
-│   ├── aggregate.go             # Concurrent fan-out, singleflight, min re-check interval
+│   ├── checker.go               # Checker interface, status entity, reason classification
+│   ├── kafka.go                 # Metadata-request probe
+│   ├── clickhouse.go            # Native-protocol ping probe
+│   ├── redis.go                 # PING probe
+│   ├── aggregate.go             # Concurrent fan-out, singleflight, cache, shutdown gate
 │   ├── handler.go               # /v1/health/live and /v1/health/ready handlers
-│   └── health_test.go
+│   ├── checker_test.go
+│   ├── aggregate_test.go
+│   ├── cache_test.go
+│   ├── handler_test.go
+│   └── shutdown_gate_test.go
 ├── httpserver/
 │   ├── server.go                # ServeMux wiring, middleware chain, Shutdown
 │   ├── middleware.go            # Correlation ID, logging, metrics, recovery
-│   └── httpserver_test.go
+│   └── server_test.go
 └── lifecycle/
     ├── shutdown.go              # Signal handling, grace period, second-signal exit
-    └── shutdown_test.go
+    ├── shutdown_test.go
+    └── startup_abort_test.go
 
 deployments/
 └── docker/
@@ -198,9 +222,17 @@ deployments/
     └── prometheus.yml           # Scrape config for api and worker
 
 tests/
-└── integration/
-    ├── deps_test.go             # //go:build integration — probes against live stack
-    └── startup_test.go          # //go:build integration — starts with stack down
+└── integration/                 # All files carry //go:build integration
+    ├── compose_test.go          # Every service reaches healthy
+    ├── idempotence_test.go      # Repeated up/down leaves no residual state
+    ├── deps_test.go             # Each probe against a live dependency
+    ├── deps_down_test.go        # 503 names the failing dependency
+    ├── liveness_test.go         # Liveness stays 200 under dependency failure (SC-003)
+    ├── recovery_test.go         # Readiness self-heals within 10s (SC-004)
+    ├── startup_test.go          # Starts with the stack down, reports not-ready
+    ├── contract_test.go         # Responses validate against contracts/health-api.yaml
+    ├── toolchain_test.go        # make check and CI invoke the same commands
+    └── secrets_test.go          # No sensitive value in any log or response
 
 scripts/
 ├── verify-cold-start.sh         # SC-001
@@ -209,6 +241,8 @@ scripts/
 .github/workflows/
 └── ci.yml                       # build · vet · lint · unit · integration
 
+.golangci.yml
+.env.example
 docker-compose.yml
 Makefile
 go.mod

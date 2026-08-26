@@ -21,7 +21,7 @@ process lifetime. Source of truth for field names and defaults:
 | Identity | `ServiceName` | string | `pulseflow-api` / `pulseflow-worker` | non-empty |
 | Identity | `Version` | string | `dev` | non-empty |
 | Identity | `Environment` | string | `local` | one of `local`, `ci`, `benchmark` |
-| Server | `HTTPPort` | int | `8080` | 1–65535 |
+| Server | `HTTPPort` | int | `8080` (api) / `8081` (worker) | 1–65535 |
 | Server | `ShutdownGracePeriod` | duration | `30s` | > 0, ≤ `5m` |
 | Logging | `LogLevel` | string | `info` | one of `debug`, `info`, `warn`, `error` |
 | Kafka | `KafkaBrokers` | []string | `localhost:9092` | ≥ 1 entry, each `host:port` |
