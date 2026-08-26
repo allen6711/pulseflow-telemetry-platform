@@ -248,32 +248,80 @@ Do not write target values as completed results. After benchmarking, the project
 
 > Sustained **[measured throughput] events/sec** and reduced p95 analytics query latency by **[measured %]** using ClickHouse aggregation and Redis caching; recovered from **[N/N]** documented worker-restart trials with no lost Kafka-acknowledged events.
 
+## Local development
+
+### Prerequisites
+
+| Tool | Minimum | Notes |
+| --- | --- | --- |
+| Go | 1.25 | `go.mod` pins the language version; newer toolchains build it fine |
+| Docker Engine | 25 | |
+| Docker Compose | v2 | `docker compose`, not the legacy `docker-compose` |
+
+Nothing else needs installing. Lint tooling is pinned in `go.mod` through the
+`tool` directive and fetched on first use.
+
+### Pinned image versions
+
+Every image is pinned to an explicit patch tag. A benchmark measured against a
+floating tag is not reproducible later, which would silently invalidate the
+numbers this project exists to produce.
+
+| Service | Image | Local port |
+| --- | --- | --- |
+| Kafka (KRaft, single broker) | `apache/kafka:4.1.0` | 9092 |
+| ClickHouse | `clickhouse/clickhouse-server:25.8` | 9000 native, 8123 HTTP |
+| Redis | `redis:8.2-alpine` | 6379 |
+| Prometheus | `prom/prometheus:v3.6.0` | 9090 |
+| PulseFlow API | built locally | 8080 |
+| PulseFlow worker | built locally | 8081 |
+
+### Commands
+
+```bash
+make up                # start the whole stack, wait for every service healthy
+make ps                # per-service health
+make logs              # follow application logs
+make down              # stop and clean up
+
+make build             # build both binaries into bin/
+make test              # unit tests, no dependencies required
+make test-integration  # integration tests against the running stack
+make lint              # go vet plus the pinned golangci-lint
+make check             # everything CI runs
+```
+
+Configuration is environment-driven with working defaults; see `.env.example`
+for the full list.
+
 ## Repository layout
 
 ```text
 pulseflow/
 ├── cmd/
-│   ├── api/
-│   └── worker/
+│   ├── api/                    # ingestion service binary
+│   └── worker/                 # telemetry processing service binary
 ├── internal/
-│   ├── api/
-│   ├── config/
-│   ├── telemetry/
-│   ├── kafka/
-│   ├── storage/
-│   ├── cache/
-│   └── observability/
-├── migrations/
+│   ├── config/                 # env-driven configuration, validation, masking
+│   ├── logging/                # slog JSON handler, trace_id, error sanitizer
+│   ├── observability/          # metric registry, HTTP and dependency metrics
+│   ├── health/                 # liveness, readiness, dependency checkers
+│   ├── httpserver/             # routing, middleware chain, shutdown
+│   └── lifecycle/              # signal handling and ordered shutdown
 ├── deployments/
-│   ├── docker/
-│   └── k8s/
+│   └── docker/                 # Dockerfiles and the Prometheus scrape config
 ├── tests/
-│   ├── integration/
-│   └── e2e/
-├── benchmarks/
-├── scripts/
+│   └── integration/            # //go:build integration, runs against compose
+├── scripts/                    # reproducible verification scripts
+├── specs/                      # Spec Kit feature specifications and plans
 ├── docker-compose.yml
+├── Makefile
 └── README.md
 ```
+
+Directories the later features add: `internal/telemetry`, `internal/kafka`,
+`internal/storage`, and `internal/cache` (F02–F07), `migrations/` (F03),
+`benchmarks/` (F09), `tests/e2e/` (F10), and `deployments/k8s/` (F11). They are
+created by the feature that owns them rather than standing empty.
 
 The exact package split may evolve, but the project should remain small enough that architecture can be understood quickly by a reviewer.

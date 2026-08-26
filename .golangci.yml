@@ -1,0 +1,41 @@
+version: "2"
+
+run:
+  timeout: 5m
+  build-tags:
+    - integration
+
+linters:
+  default: standard
+  # The classes named in research.md R-011: unused results, shadowed errors,
+  # and unclosed resources. These matter most in the Kafka, ClickHouse, and
+  # Redis code arriving in F02 through F04, where a dropped error or a leaked
+  # connection is invisible until it is a production incident.
+  enable:
+    - bodyclose      # unclosed HTTP response bodies
+    - errorlint      # error comparison that breaks wrapping
+    - noctx          # requests built without a context
+    - rowserrcheck   # unchecked sql.Rows.Err
+    - sqlclosecheck  # unclosed sql resources
+    - contextcheck   # functions that drop an inherited context
+    - nilerr         # returning nil after a non-nil error
+
+  settings:
+    errcheck:
+      check-type-assertions: true
+    govet:
+      enable:
+        - shadow
+
+  exclusions:
+    rules:
+      # Tests routinely ignore cleanup errors on purpose.
+      - path: _test\.go$
+        linters:
+          - errcheck
+          - noctx
+          - contextcheck
+
+formatters:
+  enable:
+    - gofmt

@@ -1,0 +1,156 @@
+# PulseFlow local development stack.
+#
+# Every image is pinned to an explicit patch tag: a benchmark measured against a
+# floating tag is not reproducible six months later, which would silently
+# invalidate the numbers this project exists to produce (FR-003).
+#
+# Every supporting service declares a healthcheck that exercises its own
+# protocol rather than its socket, so `make up` can distinguish "container
+# created" from "service available" (FR-002).
+
+name: pulseflow
+
+services:
+  kafka:
+    image: apache/kafka:4.1.0
+    container_name: pulseflow-kafka
+    ports:
+      - "9092:9092"
+    environment:
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_LISTENERS: PLAINTEXT://:9092,CONTROLLER://:9093,INTERNAL://:29092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://localhost:9092,INTERNAL://kafka:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,PLAINTEXT:PLAINTEXT,INTERNAL:PLAINTEXT
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka:9093
+      KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      # Partition count is what F04 scales consumers against.
+      KAFKA_NUM_PARTITIONS: 6
+      KAFKA_AUTO_CREATE_TOPICS_ENABLE: "true"
+      CLUSTER_ID: pulseflow-local-cluster
+    healthcheck:
+      test: ["CMD", "/opt/kafka/bin/kafka-topics.sh", "--bootstrap-server", "localhost:9092", "--list"]
+      interval: 5s
+      timeout: 10s
+      retries: 20
+      start_period: 15s
+
+  clickhouse:
+    image: clickhouse/clickhouse-server:25.8
+    container_name: pulseflow-clickhouse
+    ports:
+      - "9000:9000"
+      - "8123:8123"
+    environment:
+      CLICKHOUSE_DB: pulseflow
+      CLICKHOUSE_USER: default
+      CLICKHOUSE_PASSWORD: ""
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+    ulimits:
+      nofile:
+        soft: 262144
+        hard: 262144
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:8123/ping | grep -q Ok"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
+  redis:
+    image: redis:8.2-alpine
+    container_name: pulseflow-redis
+    ports:
+      - "6379:6379"
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
+  prometheus:
+    image: prom/prometheus:v3.6.0
+    container_name: pulseflow-prometheus
+    ports:
+      - "9090:9090"
+    volumes:
+      - ./deployments/docker/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=6h
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:9090/-/healthy | grep -q Healthy"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 5s
+
+  api:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile.api
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+    container_name: pulseflow-api
+    ports:
+      - "8080:8080"
+    environment:
+      PULSEFLOW_HTTP_PORT: 8080
+      PULSEFLOW_KAFKA_BROKERS: kafka:29092
+      PULSEFLOW_CLICKHOUSE_ADDR: clickhouse:9000
+      PULSEFLOW_REDIS_ADDR: redis:6379
+      PULSEFLOW_ENVIRONMENT: local
+    # depends_on is a developer-experience convenience, not a correctness
+    # mechanism: the services must start and report not-ready when dependencies
+    # are absent (FR-037), which tests/integration/startup_test.go asserts.
+    depends_on:
+      kafka:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/api", "-healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s
+
+  worker:
+    build:
+      context: .
+      dockerfile: deployments/docker/Dockerfile.worker
+      args:
+        VERSION: ${VERSION:-dev}
+        COMMIT: ${COMMIT:-unknown}
+    container_name: pulseflow-worker
+    ports:
+      - "8081:8081"
+    environment:
+      PULSEFLOW_HTTP_PORT: 8081
+      PULSEFLOW_KAFKA_BROKERS: kafka:29092
+      PULSEFLOW_CLICKHOUSE_ADDR: clickhouse:9000
+      PULSEFLOW_REDIS_ADDR: redis:6379
+      PULSEFLOW_ENVIRONMENT: local
+    depends_on:
+      kafka:
+        condition: service_healthy
+      clickhouse:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "/usr/local/bin/worker", "-healthcheck"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 3s

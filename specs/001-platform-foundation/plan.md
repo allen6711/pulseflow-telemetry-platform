@@ -185,6 +185,7 @@ internal/
 │   ├── context.go               # Correlation ID in context; traceparent adoption
 │   ├── handler.go               # Context-aware handler injecting trace_id
 │   ├── sanitize.go              # Strips credentials from driver errors before logging
+│   ├── redis.go                 # Routes go-redis's own logger into slog
 │   ├── logger_test.go
 │   ├── context_test.go
 │   ├── handler_test.go
@@ -193,7 +194,8 @@ internal/
 ├── observability/
 │   ├── registry.go              # Non-global prometheus.Registry, build_info
 │   ├── httpmetrics.go           # Route-labelled request counter and histogram
-│   └── depmetrics.go            # Dependency up gauge and check duration histogram
+│   ├── depmetrics.go            # Dependency up gauge and check duration histogram
+│   └── observability_test.go
 ├── health/
 │   ├── checker.go               # Checker interface, status entity, reason classification
 │   ├── kafka.go                 # Metadata-request probe
@@ -209,6 +211,7 @@ internal/
 ├── httpserver/
 │   ├── server.go                # ServeMux wiring, middleware chain, Shutdown
 │   ├── middleware.go            # Correlation ID, logging, metrics, recovery
+│   ├── selfcheck.go             # Self-probe for the distroless container healthcheck
 │   └── server_test.go
 └── lifecycle/
     ├── shutdown.go              # Signal handling, grace period, second-signal exit
@@ -242,6 +245,7 @@ scripts/
 └── ci.yml                       # build · vet · lint · unit · integration
 
 .golangci.yml
+.dockerignore
 .env.example
 docker-compose.yml
 Makefile

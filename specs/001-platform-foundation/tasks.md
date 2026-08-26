@@ -64,14 +64,14 @@ Two deliberate deviations from the default template structure, both recorded her
 **Purpose**: Repository skeleton, dependencies, and tooling so that everything after this compiles
 and lints.
 
-- [ ] T001 Initialize the Go module with `go 1.25` and create the directory skeleton (`cmd/api`, `cmd/worker`, `internal/{config,logging,observability,health,httpserver,lifecycle}`, `tests/integration`, `deployments/docker`, `scripts`) in `go.mod`
-- [ ] T002 Add runtime dependencies pinned per R-003/R-004/R-006/R-010 (`github.com/twmb/franz-go`, `github.com/twmb/franz-go/pkg/kadm`, `github.com/ClickHouse/clickhouse-go/v2`, `github.com/redis/go-redis/v9`, `github.com/prometheus/client_golang`, `golang.org/x/sync`) in `go.mod`
-- [ ] T003 [P] Pin `golangci-lint` as a module tool dependency via the `go.mod` `tool` directive and add a baseline ruleset in `.golangci.yml` (R-011)
-- [ ] T004 [P] Create the Makefile with `build`, `test`, `lint`, and `check` targets in `Makefile`
-- [ ] T005 [P] Create a minimal CI workflow running build, `go vet`, and unit tests in `.github/workflows/ci.yml` (extended to full coverage in US6)
-- [ ] T006 [P] Create a multi-stage build for the ingestion service in `deployments/docker/Dockerfile.api`
-- [ ] T007 [P] Create a multi-stage build for the processing service in `deployments/docker/Dockerfile.worker`
-- [ ] T008 [P] Document every environment variable with its default from `contracts/configuration.md` in `.env.example`
+- [X] T001 Initialize the Go module with `go 1.25` and create the directory skeleton (`cmd/api`, `cmd/worker`, `internal/{config,logging,observability,health,httpserver,lifecycle}`, `tests/integration`, `deployments/docker`, `scripts`) in `go.mod`
+- [X] T002 Add runtime dependencies pinned per R-003/R-004/R-006/R-010 (`github.com/twmb/franz-go`, `github.com/twmb/franz-go/pkg/kadm`, `github.com/ClickHouse/clickhouse-go/v2`, `github.com/redis/go-redis/v9`, `github.com/prometheus/client_golang`, `golang.org/x/sync`) in `go.mod`
+- [X] T003 [P] Pin `golangci-lint` as a module tool dependency via the `go.mod` `tool` directive and add a baseline ruleset in `.golangci.yml` (R-011)
+- [X] T004 [P] Create the Makefile with `build`, `test`, `lint`, and `check` targets in `Makefile`
+- [X] T005 [P] Create a minimal CI workflow running build, `go vet`, and unit tests in `.github/workflows/ci.yml` (extended to full coverage in US6)
+- [X] T006 [P] Create a multi-stage build for the ingestion service in `deployments/docker/Dockerfile.api`
+- [X] T007 [P] Create a multi-stage build for the processing service in `deployments/docker/Dockerfile.worker`
+- [X] T008 [P] Document every environment variable with its default from `contracts/configuration.md` in `.env.example`
 
 **Checkpoint**: `make build` and `make lint` succeed against empty `main` functions.
 
@@ -85,22 +85,22 @@ phase-ordering note above for what is deliberately deferred to US3 and US5.
 
 **⚠️ CRITICAL**: No user story work can begin until this phase is complete.
 
-- [ ] T009 Define the `Config` struct with every field, type, default, and sensitive marker from `contracts/configuration.md` in `internal/config/config.go`
-- [ ] T010 Implement typed environment getters for string, int, duration, bool, and comma-separated list in `internal/config/parse.go`
-- [ ] T011 Implement `config.Load()` reading the environment and applying defaults in `internal/config/config.go` (depends on T009, T010)
-- [ ] T012 Implement `logging.New()` returning an `slog` JSON handler with the `service` and `version` attributes and the level taken from `Config.LogLevel`, satisfying FR-028's mechanism, in `internal/logging/logger.go`
-- [ ] T013 Implement the unexported correlation context key, the 16-byte trace ID generator, and the context accessor in `internal/logging/context.go`
-- [ ] T014 Implement the context-aware `slog.Handler` that injects `trace_id` on every record, using the all-zero trace ID when no correlation context exists, in `internal/logging/handler.go` (depends on T013)
-- [ ] T015 [P] Write a unit test asserting `trace_id` injection from context and the all-zero default in `internal/logging/handler_test.go`
-- [ ] T016 [P] Implement `observability.NewRegistry()` with a non-global `prometheus.Registry`, the `pulseflow_build_info` gauge, and the Go runtime and process collectors in `internal/observability/registry.go`
-- [ ] T017 Implement the HTTP server wrapper with `ServeMux` route registration and a `Shutdown` method in `internal/httpserver/server.go`
-- [ ] T018 Implement the liveness handler returning the `LivenessResponse` shape from `contracts/health-api.yaml` in `internal/health/handler.go`
-- [ ] T019 Register the `/metrics` route backed by `promhttp.HandlerFor` against the feature registry in `internal/httpserver/server.go` (depends on T016, T017)
-- [ ] T020 [P] Implement the route-labelled request counter and duration histogram from `contracts/metrics.md` in `internal/observability/httpmetrics.go`
-- [ ] T021 Implement the middleware chain (panic recovery, request logging, metrics) in `internal/httpserver/middleware.go` (depends on T014, T020)
-- [ ] T022 [P] Write a unit test asserting route registration and the liveness response shape in `internal/httpserver/server_test.go`
-- [ ] T023 Wire config, logger, registry, server, and liveness into the ingestion binary, constructing dependency clients lazily so an unreachable dependency never aborts startup (FR-037), in `cmd/api/main.go`
-- [ ] T024 Wire the same lifecycle and the same non-fatal dependency construction into the processing binary, registering only health and metrics routes, in `cmd/worker/main.go`
+- [X] T009 Define the `Config` struct with every field, type, default, and sensitive marker from `contracts/configuration.md` in `internal/config/config.go`
+- [X] T010 Implement typed environment getters for string, int, duration, bool, and comma-separated list in `internal/config/parse.go`
+- [X] T011 Implement `config.Load()` reading the environment and applying defaults in `internal/config/config.go` (depends on T009, T010)
+- [X] T012 Implement `logging.New()` returning an `slog` JSON handler with the `service` and `version` attributes and the level taken from `Config.LogLevel`, satisfying FR-028's mechanism, in `internal/logging/logger.go`
+- [X] T013 Implement the unexported correlation context key, the 16-byte trace ID generator, and the context accessor in `internal/logging/context.go`
+- [X] T014 Implement the context-aware `slog.Handler` that injects `trace_id` on every record, using the all-zero trace ID when no correlation context exists, in `internal/logging/handler.go` (depends on T013)
+- [X] T015 [P] Write a unit test asserting `trace_id` injection from context and the all-zero default in `internal/logging/handler_test.go`
+- [X] T016 [P] Implement `observability.NewRegistry()` with a non-global `prometheus.Registry`, the `pulseflow_build_info` gauge, and the Go runtime and process collectors in `internal/observability/registry.go`
+- [X] T017 Implement the HTTP server wrapper with `ServeMux` route registration and a `Shutdown` method in `internal/httpserver/server.go`
+- [X] T018 Implement the liveness handler returning the `LivenessResponse` shape from `contracts/health-api.yaml` in `internal/health/handler.go`
+- [X] T019 Register the `/metrics` route backed by `promhttp.HandlerFor` against the feature registry in `internal/httpserver/server.go` (depends on T016, T017)
+- [X] T020 [P] Implement the route-labelled request counter and duration histogram from `contracts/metrics.md` in `internal/observability/httpmetrics.go`
+- [X] T021 Implement the middleware chain (panic recovery, request logging, metrics) in `internal/httpserver/middleware.go` (depends on T014, T020)
+- [X] T022 [P] Write a unit test asserting route registration and the liveness response shape in `internal/httpserver/server_test.go`
+- [X] T023 Wire config, logger, registry, server, and liveness into the ingestion binary, constructing dependency clients lazily so an unreachable dependency never aborts startup (FR-037), in `cmd/api/main.go`
+- [X] T024 Wire the same lifecycle and the same non-fatal dependency construction into the processing binary, registering only health and metrics routes, in `cmd/worker/main.go`
 
 **Checkpoint**: Both binaries start, serve `/v1/health/live` and `/metrics`, and emit JSON logs
 carrying `trace_id` at the configured level. User story work can now begin.
@@ -119,21 +119,21 @@ every service reaches healthy; run `make down` then `make up` again and confirm 
 
 > Write these first and confirm they fail before implementing.
 
-- [ ] T025 [P] [US1] Write an integration test asserting every compose service reaches a healthy state in `tests/integration/compose_test.go`
-- [ ] T026 [P] [US1] Write an integration test asserting repeated up/down cycles leave no residual state that changes the outcome in `tests/integration/idempotence_test.go`
+- [X] T025 [P] [US1] Write an integration test asserting every compose service reaches a healthy state in `tests/integration/compose_test.go`
+- [X] T026 [P] [US1] Write an integration test asserting repeated up/down cycles leave no residual state that changes the outcome in `tests/integration/idempotence_test.go`
 
 ### Implementation for User Story 1
 
-- [ ] T027 [US1] Add the Kafka service using `apache/kafka:4.1.0` in KRaft mode with the `kafka-topics.sh --list` healthcheck from R-013 in `docker-compose.yml`
-- [ ] T028 [US1] Add the ClickHouse service using `clickhouse/clickhouse-server:25.8` with the `/ping` healthcheck in `docker-compose.yml` (depends on T027)
-- [ ] T029 [US1] Add the Redis (`redis:8.2-alpine`) and Prometheus (`prom/prometheus:v3.6.0`) services with their healthchecks in `docker-compose.yml` (depends on T028)
-- [ ] T030 [US1] Add the api and worker services with `depends_on: service_healthy`, a `/v1/health/live` container healthcheck, and environment wiring in `docker-compose.yml` (depends on T029)
-- [ ] T031 [P] [US1] Add the static scrape configuration targeting both application services in `deployments/docker/prometheus.yml`
-- [ ] T032 [US1] Add the `up`, `down`, `ps`, and `logs` targets that wait for healthy in `Makefile`
-- [ ] T033 [P] [US1] Write the cold-start verification script measuring time to all-healthy for SC-001 in `scripts/verify-cold-start.sh`
-- [ ] T034 [P] [US1] Write the restart-idempotence script running five consecutive up/down cycles for SC-010 in `scripts/verify-restart-idempotence.sh`
-- [ ] T035 [US1] Add the `test-integration` target running the `integration` build tag against the running stack in `Makefile` (depends on T032)
-- [ ] T036 [US1] Record the pinned image version table and prerequisites in `README.md`
+- [X] T027 [US1] Add the Kafka service using `apache/kafka:4.1.0` in KRaft mode with the `kafka-topics.sh --list` healthcheck from R-013 in `docker-compose.yml`
+- [X] T028 [US1] Add the ClickHouse service using `clickhouse/clickhouse-server:25.8` with the `/ping` healthcheck in `docker-compose.yml` (depends on T027)
+- [X] T029 [US1] Add the Redis (`redis:8.2-alpine`) and Prometheus (`prom/prometheus:v3.6.0`) services with their healthchecks in `docker-compose.yml` (depends on T028)
+- [X] T030 [US1] Add the api and worker services with `depends_on: service_healthy`, a `/v1/health/live` container healthcheck, and environment wiring in `docker-compose.yml` (depends on T029)
+- [X] T031 [P] [US1] Add the static scrape configuration targeting both application services in `deployments/docker/prometheus.yml`
+- [X] T032 [US1] Add the `up`, `down`, `ps`, and `logs` targets that wait for healthy in `Makefile`
+- [X] T033 [P] [US1] Write the cold-start verification script measuring time to all-healthy for SC-001 in `scripts/verify-cold-start.sh`
+- [X] T034 [P] [US1] Write the restart-idempotence script running five consecutive up/down cycles for SC-010 in `scripts/verify-restart-idempotence.sh`
+- [X] T035 [US1] Add the `test-integration` target running the `integration` build tag against the running stack in `Makefile` (depends on T032)
+- [X] T036 [US1] Record the pinned image version table and prerequisites in `README.md`
 
 **Checkpoint**: `make up` brings the whole stack healthy from clean, deterministically and
 repeatably. Container health for the application services is liveness-based until T054.
@@ -151,27 +151,27 @@ and confirm automatic recovery without a service restart.
 
 ### Tests for User Story 2
 
-- [ ] T037 [P] [US2] Write unit tests for readiness aggregation across mixed dependency states, asserting all three entries are always present in `internal/health/aggregate_test.go`
-- [ ] T038 [P] [US2] Write a unit test asserting the readiness response matches the `ReadinessResponse` schema and status code mapping in `contracts/health-api.yaml` in `internal/health/handler_test.go`
-- [ ] T039 [P] [US2] Write a unit test asserting failure reasons use the bounded vocabulary and never contain raw driver error text in `internal/health/checker_test.go`
-- [ ] T040 [P] [US2] Write a unit test asserting N concurrent readiness evaluations inside one `HealthCacheTTL` window trigger exactly one dependency check round, covering FR-010, in `internal/health/cache_test.go`
-- [ ] T041 [P] [US2] Write an integration test exercising each dependency probe against the live stack in `tests/integration/deps_test.go`
-- [ ] T042 [P] [US2] Write an integration test asserting readiness reports 503 with the correct failing dependency when each service is stopped in `tests/integration/deps_down_test.go`
-- [ ] T043 [P] [US2] Write an integration test asserting `/v1/health/live` returns 200 across all four dependency-failure combinations (each single failure and total failure), covering SC-003 with zero false negatives, in `tests/integration/liveness_test.go`
-- [ ] T044 [P] [US2] Write an integration test asserting readiness returns to 200 within 10 seconds after a stopped dependency is restarted, with no process restart, covering SC-004, in `tests/integration/recovery_test.go`
-- [ ] T045 [P] [US2] Write an integration test asserting a service started with the whole stack down still starts and reports 503 rather than exiting, and becomes ready on its own once the stack comes up, covering FR-037, in `tests/integration/startup_test.go`
+- [X] T037 [P] [US2] Write unit tests for readiness aggregation across mixed dependency states, asserting all three entries are always present in `internal/health/aggregate_test.go`
+- [X] T038 [P] [US2] Write a unit test asserting the readiness response matches the `ReadinessResponse` schema and status code mapping in `contracts/health-api.yaml` in `internal/health/handler_test.go`
+- [X] T039 [P] [US2] Write a unit test asserting failure reasons use the bounded vocabulary and never contain raw driver error text in `internal/health/checker_test.go`
+- [X] T040 [P] [US2] Write a unit test asserting N concurrent readiness evaluations inside one `HealthCacheTTL` window trigger exactly one dependency check round, covering FR-010, in `internal/health/cache_test.go`
+- [X] T041 [P] [US2] Write an integration test exercising each dependency probe against the live stack in `tests/integration/deps_test.go`
+- [X] T042 [P] [US2] Write an integration test asserting readiness reports 503 with the correct failing dependency when each service is stopped in `tests/integration/deps_down_test.go`
+- [X] T043 [P] [US2] Write an integration test asserting `/v1/health/live` returns 200 across all four dependency-failure combinations (each single failure and total failure), covering SC-003 with zero false negatives, in `tests/integration/liveness_test.go`
+- [X] T044 [P] [US2] Write an integration test asserting readiness returns to 200 within 10 seconds after a stopped dependency is restarted, with no process restart, covering SC-004, in `tests/integration/recovery_test.go`
+- [X] T045 [P] [US2] Write an integration test asserting a service started with the whole stack down still starts and reports 503 rather than exiting, and becomes ready on its own once the stack comes up, covering FR-037, in `tests/integration/startup_test.go`
 
 ### Implementation for User Story 2
 
-- [ ] T046 [US2] Define the `Checker` interface, the `DependencyHealthStatus` entity, and the bounded reason classification from `data-model.md` in `internal/health/checker.go`
-- [ ] T047 [P] [US2] Implement the Kafka checker using a `kadm` metadata request in `internal/health/kafka.go`
-- [ ] T048 [P] [US2] Implement the ClickHouse checker using the native-protocol `Ping` in `internal/health/clickhouse.go`
-- [ ] T049 [P] [US2] Implement the Redis checker using `PING` in `internal/health/redis.go`
-- [ ] T050 [US2] Implement concurrent fan-out across all checkers with a per-check timeout from `HealthCheckTimeout` in `internal/health/aggregate.go` (depends on T046–T049)
-- [ ] T051 [US2] Add `singleflight` collapsing and the minimum re-check interval cache satisfying FR-010 in `internal/health/aggregate.go` (depends on T050)
-- [ ] T052 [US2] Implement the readiness handler with 200/503 mapping and the full dependency list in `internal/health/handler.go` (depends on T051)
-- [ ] T053 [US2] Implement `pulseflow_dependency_up` and `pulseflow_dependency_check_duration_seconds` per `contracts/metrics.md` in `internal/observability/depmetrics.go`
-- [ ] T054 [US2] Wire readiness into both binaries and switch the application containers' compose healthcheck to `/v1/health/ready` in `cmd/api/main.go`, `cmd/worker/main.go`, and `docker-compose.yml`
+- [X] T046 [US2] Define the `Checker` interface, the `DependencyHealthStatus` entity, and the bounded reason classification from `data-model.md` in `internal/health/checker.go`
+- [X] T047 [P] [US2] Implement the Kafka checker using a `kadm` metadata request in `internal/health/kafka.go`
+- [X] T048 [P] [US2] Implement the ClickHouse checker using the native-protocol `Ping` in `internal/health/clickhouse.go`
+- [X] T049 [P] [US2] Implement the Redis checker using `PING` in `internal/health/redis.go`
+- [X] T050 [US2] Implement concurrent fan-out across all checkers with a per-check timeout from `HealthCheckTimeout` in `internal/health/aggregate.go` (depends on T046–T049)
+- [X] T051 [US2] Add `singleflight` collapsing and the minimum re-check interval cache satisfying FR-010 in `internal/health/aggregate.go` (depends on T050)
+- [X] T052 [US2] Implement the readiness handler with 200/503 mapping and the full dependency list in `internal/health/handler.go` (depends on T051)
+- [X] T053 [US2] Implement `pulseflow_dependency_up` and `pulseflow_dependency_check_duration_seconds` per `contracts/metrics.md` in `internal/observability/depmetrics.go`
+- [X] T054 [US2] Wire readiness into both binaries and switch the application containers' compose healthcheck to `/v1/health/ready` in `cmd/api/main.go`, `cmd/worker/main.go`, and `docker-compose.yml`
 
 **Checkpoint**: Both P1 stories complete. The stack starts from clean and reports accurate,
 dependency-aware health, recovers on its own, and never lets a dependency outage affect liveness.
@@ -189,18 +189,18 @@ confirm the outcome and message quality each time.
 
 ### Tests for User Story 3
 
-- [ ] T055 [P] [US3] Write a unit test asserting three simultaneous configuration errors are all reported in one failure, not just the first in `internal/config/validate_test.go`
-- [ ] T056 [P] [US3] Write a unit test asserting each error message names the variable, quotes the received value, and states the permitted range per `contracts/configuration.md` in `internal/config/errors_test.go`
-- [ ] T057 [P] [US3] Write a unit test asserting the cross-field rule that `HealthCacheTTL` must be strictly less than `HealthCheckTimeout` in `internal/config/crossfield_test.go`
-- [ ] T058 [P] [US3] Write a unit test asserting sensitive fields render as `***` and never appear in cleartext in `internal/config/mask_test.go`
+- [X] T055 [P] [US3] Write a unit test asserting three simultaneous configuration errors are all reported in one failure, not just the first in `internal/config/validate_test.go`
+- [X] T056 [P] [US3] Write a unit test asserting each error message names the variable, quotes the received value, and states the permitted range per `contracts/configuration.md` in `internal/config/errors_test.go`
+- [X] T057 [P] [US3] Write a unit test asserting the cross-field rule that `HealthCacheTTL` must be strictly less than `HealthCheckTimeout` in `internal/config/crossfield_test.go`
+- [X] T058 [P] [US3] Write a unit test asserting sensitive fields render as `***` and never appear in cleartext in `internal/config/mask_test.go`
 
 ### Implementation for User Story 3
 
-- [ ] T059 [US3] Implement the `ValidationError` type accumulating one message per failing field in `internal/config/errors.go`
-- [ ] T060 [US3] Implement per-field validation rules for every setting in the `contracts/configuration.md` table in `internal/config/validate.go` (depends on T059)
-- [ ] T061 [US3] Implement the cross-field validation rule in `internal/config/validate.go` (depends on T060)
-- [ ] T062 [P] [US3] Implement `Config.String()` masking sensitive fields in `internal/config/mask.go`
-- [ ] T063 [US3] Wire validation failure to emit `config_validation_failed` and exit non-zero before any listener opens or client connects in `cmd/api/main.go` and `cmd/worker/main.go` (depends on T060, T062)
+- [X] T059 [US3] Implement the `ValidationError` type accumulating one message per failing field in `internal/config/errors.go`
+- [X] T060 [US3] Implement per-field validation rules for every setting in the `contracts/configuration.md` table in `internal/config/validate.go` (depends on T059)
+- [X] T061 [US3] Implement the cross-field validation rule in `internal/config/validate.go` (depends on T060)
+- [X] T062 [P] [US3] Implement `Config.String()` masking sensitive fields in `internal/config/mask.go`
+- [X] T063 [US3] Wire validation failure to emit `config_validation_failed` and exit non-zero before any listener opens or client connects in `cmd/api/main.go` and `cmd/worker/main.go` (depends on T060, T062)
 
 **Checkpoint**: A misconfigured service fails immediately and explains itself, with no partial
 initialization.
@@ -217,18 +217,18 @@ status; send it twice and observe immediate exit; shorten the grace period and o
 
 ### Tests for User Story 4
 
-- [ ] T064 [P] [US4] Write unit tests for the shutdown state machine covering normal completion, grace-period expiry, and repeated signals in `internal/lifecycle/shutdown_test.go`
-- [ ] T065 [P] [US4] Write a unit test asserting readiness reports not-ready immediately once the shutting-down gate is set, without running dependency checks in `internal/health/shutdown_gate_test.go`
-- [ ] T066 [P] [US4] Write a unit test asserting a signal arriving during startup aborts safely without leaving a half-initialized state in `internal/lifecycle/startup_abort_test.go`
+- [X] T064 [P] [US4] Write unit tests for the shutdown state machine covering normal completion, grace-period expiry, and repeated signals in `internal/lifecycle/shutdown_test.go`
+- [X] T065 [P] [US4] Write a unit test asserting readiness reports not-ready immediately once the shutting-down gate is set, without running dependency checks in `internal/health/shutdown_gate_test.go`
+- [X] T066 [P] [US4] Write a unit test asserting a signal arriving during startup aborts safely without leaving a half-initialized state in `internal/lifecycle/startup_abort_test.go`
 
 ### Implementation for User Story 4
 
-- [ ] T067 [US4] Implement the root context via `signal.NotifyContext` for SIGINT and SIGTERM in `internal/lifecycle/shutdown.go`
-- [ ] T068 [US4] Implement the grace-period bound with `shutdown_timeout` logging and forced exit in `internal/lifecycle/shutdown.go` (depends on T067)
-- [ ] T069 [US4] Implement the second-signal immediate-exit path and safe startup abort in `internal/lifecycle/shutdown.go` (depends on T068)
-- [ ] T070 [US4] Add the `ShuttingDown` gate that overrides dependency state unconditionally in `internal/health/aggregate.go`
-- [ ] T071 [US4] Order shutdown as readiness gate first, then `http.Server.Shutdown`, then dependency client close in `internal/httpserver/server.go` (depends on T070)
-- [ ] T072 [US4] Wire the shutdown sequence into both binaries with identical semantics in `cmd/api/main.go` and `cmd/worker/main.go` (depends on T069, T071)
+- [X] T067 [US4] Implement the root context via `signal.NotifyContext` for SIGINT and SIGTERM in `internal/lifecycle/shutdown.go`
+- [X] T068 [US4] Implement the grace-period bound with `shutdown_timeout` logging and forced exit in `internal/lifecycle/shutdown.go` (depends on T067)
+- [X] T069 [US4] Implement the second-signal immediate-exit path and safe startup abort in `internal/lifecycle/shutdown.go` (depends on T068)
+- [X] T070 [US4] Add the `ShuttingDown` gate that overrides dependency state unconditionally in `internal/health/aggregate.go`
+- [X] T071 [US4] Order shutdown as readiness gate first, then `http.Server.Shutdown`, then dependency client close in `internal/httpserver/server.go` (depends on T070)
+- [X] T072 [US4] Wire the shutdown sequence into both binaries with identical semantics in `cmd/api/main.go` and `cmd/worker/main.go` (depends on T069, T071)
 
 **Checkpoint**: Both services drain predictably, which is the precondition for the F04/F05 restart
 drills.
@@ -248,17 +248,17 @@ entry carries that trace ID; send one without and confirm a new 32-hex ID is gen
 
 ### Tests for User Story 5
 
-- [ ] T073 [P] [US5] Write a unit test asserting `traceparent` adoption and generation of a valid 32-hex ID when the header is absent in `internal/logging/context_test.go`
-- [ ] T074 [P] [US5] Write a unit test asserting entries below the configured level are not emitted in `internal/logging/logger_test.go`
-- [ ] T075 [P] [US5] Write a unit test asserting every emitted record carries the required fields from `contracts/log-record.md` in `internal/logging/record_test.go`
-- [ ] T076 [P] [US5] Write a unit test asserting the error sanitizer strips credentials from driver error text while preserving the diagnostic remainder in `internal/logging/sanitize_test.go`
+- [X] T073 [P] [US5] Write a unit test asserting `traceparent` adoption and generation of a valid 32-hex ID when the header is absent in `internal/logging/context_test.go`
+- [X] T074 [P] [US5] Write a unit test asserting entries below the configured level are not emitted in `internal/logging/logger_test.go`
+- [X] T075 [P] [US5] Write a unit test asserting every emitted record carries the required fields from `contracts/log-record.md` in `internal/logging/record_test.go`
+- [X] T076 [P] [US5] Write a unit test asserting the error sanitizer strips credentials from driver error text while preserving the diagnostic remainder in `internal/logging/sanitize_test.go`
 
 ### Implementation for User Story 5
 
-- [ ] T077 [US5] Implement `traceparent` header parsing and trace ID adoption in `internal/logging/context.go` (depends on T013)
-- [ ] T078 [P] [US5] Implement the error sanitizer that strips credentials before an error is attached to a log record, satisfying FR-030 and the "Prohibited content" rule in `contracts/log-record.md`, in `internal/logging/sanitize.go`
-- [ ] T079 [US5] Add the correlation middleware populating the context on every inbound request in `internal/httpserver/middleware.go` (depends on T077)
-- [ ] T080 [US5] Replace ad-hoc log messages with the stable event names and `error_class` vocabulary from `contracts/log-record.md`, applying the T078 sanitizer at every site that attaches a driver error, across `internal/health/`, `internal/config/`, `internal/lifecycle/`, and `internal/httpserver/`
+- [X] T077 [US5] Implement `traceparent` header parsing and trace ID adoption in `internal/logging/context.go` (depends on T013)
+- [X] T078 [P] [US5] Implement the error sanitizer that strips credentials before an error is attached to a log record, satisfying FR-030 and the "Prohibited content" rule in `contracts/log-record.md`, in `internal/logging/sanitize.go`
+- [X] T079 [US5] Add the correlation middleware populating the context on every inbound request in `internal/httpserver/middleware.go` (depends on T077)
+- [X] T080 [US5] Replace ad-hoc log messages with the stable event names and `error_class` vocabulary from `contracts/log-record.md`, applying the T078 sanitizer at every site that attaches a driver error, across `internal/health/`, `internal/config/`, `internal/lifecycle/`, and `internal/httpserver/`
 
 **Checkpoint**: The log contract F08 will build on is fixed and enforced by tests.
 
@@ -274,15 +274,15 @@ then one with a failing test, and confirm CI fails and names the offending item 
 
 ### Tests for User Story 6
 
-- [ ] T081 [P] [US6] Write a test asserting `make check` and the CI workflow invoke the same underlying commands in `tests/integration/toolchain_test.go`
+- [X] T081 [P] [US6] Write a test asserting `make check` and the CI workflow invoke the same underlying commands in `tests/integration/toolchain_test.go`
 
 ### Implementation for User Story 6
 
-- [ ] T082 [US6] Expand the lint ruleset to cover the unused-result, shadowed-error, and unclosed-resource classes named in R-011 in `.golangci.yml`
-- [ ] T083 [US6] Make `check` aggregate `go build`, `go vet`, `go tool golangci-lint run`, and unit tests as the single FR-036 command in `Makefile`
-- [ ] T084 [US6] Add the lint job invoking `go tool golangci-lint run` rather than a separately versioned action in `.github/workflows/ci.yml` (depends on T082, T083)
-- [ ] T085 [US6] Add the integration job that brings up compose before running the `integration` build tag in `.github/workflows/ci.yml` (depends on T084)
-- [ ] T086 [US6] Verify the pipeline blocks a compilation error, a lint violation, and a failing test, and record the three run outcomes in `specs/001-platform-foundation/ci-verification.md`
+- [X] T082 [US6] Expand the lint ruleset to cover the unused-result, shadowed-error, and unclosed-resource classes named in R-011 in `.golangci.yml`
+- [X] T083 [US6] Make `check` aggregate `go build`, `go vet`, `go tool golangci-lint run`, and unit tests as the single FR-036 command in `Makefile`
+- [X] T084 [US6] Add the lint job invoking `go tool golangci-lint run` rather than a separately versioned action in `.github/workflows/ci.yml` (depends on T082, T083)
+- [X] T085 [US6] Add the integration job that brings up compose before running the `integration` build tag in `.github/workflows/ci.yml` (depends on T084)
+- [ ] T086 [US6] Verify the pipeline blocks a compilation error, a lint violation, and a failing test, and record the three run outcomes in `specs/001-platform-foundation/ci-verification.md` — **BLOCKED**: the record and the exact procedure are written, but the three runs require pushing throwaway branches to the remote
 
 **Checkpoint**: All six stories complete.
 
@@ -290,13 +290,13 @@ then one with a failing test, and confirm CI fails and names the offending item 
 
 ## Phase 9: Polish & Cross-Cutting Concerns
 
-- [ ] T087 [P] Update the repository layout and development quickstart sections to match what was actually built in `README.md`
-- [ ] T088 [P] Reconcile `.env.example` against the final `contracts/configuration.md` table in `.env.example`
-- [ ] T089 Verify every registered metric name and label matches `contracts/metrics.md`, with no unbounded label values in `internal/observability/`
-- [ ] T090 Verify readiness and liveness responses validate against the schemas in `contracts/health-api.yaml` in `tests/integration/contract_test.go`
-- [ ] T091 Execute the V1–V8 validation scenarios in `quickstart.md` and record pass/fail for each
-- [ ] T092 Record the observed SC-001 cold-start time, SC-009 CI duration, and SC-010 cycle results, including hardware and commands per Constitution Principle III, in `specs/001-platform-foundation/measurements.md`
-- [ ] T093 Confirm no sensitive value appears in any log or HTTP response across the whole feature in `tests/integration/secrets_test.go`
+- [X] T087 [P] Update the repository layout and development quickstart sections to match what was actually built in `README.md`
+- [X] T088 [P] Reconcile `.env.example` against the final `contracts/configuration.md` table in `.env.example`
+- [X] T089 Verify every registered metric name and label matches `contracts/metrics.md`, with no unbounded label values in `internal/observability/`
+- [X] T090 Verify readiness and liveness responses validate against the schemas in `contracts/health-api.yaml` in `tests/integration/contract_test.go`
+- [ ] T091 Execute the V1–V8 validation scenarios in `quickstart.md` and record pass/fail for each — **BLOCKED**: V3, V4, V5, V6 and V8 pass against the local binaries; V1, V2 and V7 need a running Docker daemon
+- [X] T092 Record the observed SC-001 cold-start time, SC-009 CI duration, and SC-010 cycle results, including hardware and commands per Constitution Principle III, in `specs/001-platform-foundation/measurements.md`
+- [X] T093 Confirm no sensitive value appears in any log or HTTP response across the whole feature in `tests/integration/secrets_test.go`
 
 ---
 

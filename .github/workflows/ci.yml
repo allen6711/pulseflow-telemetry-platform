@@ -1,0 +1,61 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+# Every job runs a Makefile target rather than an inline command, so a
+# contributor running `make check` locally executes exactly what CI executes
+# (FR-036). Divergence here is what produces "passes locally, fails in CI".
+jobs:
+  build-and-test:
+    name: Build and unit test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build
+        run: make build
+      - name: Unit tests
+        run: make test
+
+  lint:
+    name: Lint
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      # golangci-lint is pinned in go.mod through the tool directive, so this
+      # runs the same version a contributor gets locally. A separately
+      # versioned action would drift from it.
+      - name: Vet and lint
+        run: make lint
+
+  integration:
+    name: Integration tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+          cache: true
+      - name: Build binaries
+        run: make build
+      - name: Start the stack
+        run: make up
+      - name: Integration tests
+        run: make test-integration
+      - name: Dump service logs on failure
+        if: failure()
+        run: docker compose logs --no-color
+      - name: Stop the stack
+        if: always()
+        run: make down

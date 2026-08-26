@@ -1,0 +1,13 @@
+.git/
+.github/
+bin/
+dist/
+specs/
+deployments/
+docker-compose.yml
+*.md
+.env
+.env.local
+.DS_Store
+.idea/
+.vscode/
