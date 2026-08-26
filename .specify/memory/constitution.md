@@ -1,173 +1,223 @@
 <!--
 Sync Impact Report
 ==================
-Version change: (未填寫樣板) → 1.0.0
-Bump rationale: 首次批准，將樣板佔位符全部替換為具體治理內容（MINOR/PATCH 不適用於初次批准）。
+Version change: 1.0.0 → 1.0.1
+Bump rationale: PATCH. The governing document was translated from Traditional Chinese to English
+  for consistency with README.md and FEATURES.md. No principle was added, removed, or
+  semantically changed; every MUST/MUST NOT/SHOULD retains its original force and scope.
 
-Modified principles:
-  [PRINCIPLE_1_NAME] → I. 可觀測性優先 (Observability First)
-  [PRINCIPLE_2_NAME] → II. 測試分層 (Layered Testing) — NON-NEGOTIABLE
-  [PRINCIPLE_3_NAME] → III. 可重現的量測 (Reproducible Measurement)
-  [PRINCIPLE_4_NAME] → IV. 至少一次交付與應用層冪等 (At-Least-Once + Idempotency)
-  [PRINCIPLE_5_NAME] → V. 簡潔優先與範圍紀律 (Simplicity & Scope Discipline)
+Modified principles: none (translation only)
+  I.   Observability First
+  II.  Layered Testing — NON-NEGOTIABLE
+  III. Reproducible Measurement
+  IV.  At-Least-Once Delivery & Application-Level Idempotency
+  V.   Simplicity & Scope Discipline
 
-Added sections:
-  [SECTION_2_NAME]  → 技術與範圍限制 (Technology & Scope Constraints)
-  [SECTION_3_NAME]  → 開發流程與品質關卡 (Development Workflow & Quality Gates)
-  Governance        → 具體修訂程序、版本政策與合規審查
-
-Removed sections: 無
+Added sections: none
+Removed sections: none
 
 Templates requiring updates:
-  .specify/templates/plan-template.md — ✅ 無需修改；其 "Constitution Check" 區塊於執行時讀取本檔，
-    可直接引用各原則的「關卡」條列作為 gate。
-  .specify/templates/spec-template.md — ✅ 無需修改。
-  .specify/templates/tasks-template.md — ✅ 無需修改。
-  .specify/templates/checklist-template.md — ✅ 無需修改。
+  .specify/templates/plan-template.md — OK, no change needed; its "Constitution Check" section
+    reads this file at runtime and can cite each principle's "Gate" bullet directly.
+  .specify/templates/spec-template.md — OK, no change needed.
+  .specify/templates/tasks-template.md — OK, no change needed.
+  .specify/templates/checklist-template.md — OK, no change needed.
 
-Follow-up TODOs: 無（所有佔位符皆已填入具體值）
+Follow-up TODOs: none
+
+Prior history
+-------------
+1.0.0 (2026-08-24) — Initial ratification. All template placeholders replaced with concrete
+  governance content.
 -->
 
 # PulseFlow Constitution
 
-PulseFlow 是一套分散式遙測擷取與分析平台。本憲章定義所有 feature 的規格、計畫與實作
-都必須遵守的不可協商規則。憲章優先於個人偏好與既有習慣。
+PulseFlow is a distributed telemetry ingestion and analytics platform. This constitution defines
+the non-negotiable rules that every feature specification, plan, and implementation must follow.
+It takes precedence over individual preference and prior habit.
 
 ## Core Principles
 
-### I. 可觀測性優先 (Observability First)
+### I. Observability First
 
-任何新增或修改的處理路徑（HTTP handler、Kafka producer/consumer、儲存寫入、快取存取）
-MUST 在同一份變更中同時具備可觀測性，不得延後補上：
+Any processing path that is added or modified — HTTP handler, Kafka producer or consumer, storage
+write, cache access — MUST gain its observability in the same change. It MUST NOT be deferred:
 
-- MUST 輸出至少一項 Prometheus 指標，涵蓋該路徑的流量、延遲與失敗三者中的相關項目。
-- MUST 輸出結構化 JSON 日誌，並帶有 `trace_id`；錯誤日誌 MUST 包含錯誤分類與足以定位的上下文。
-- 指標 label MUST 為有界基數。禁止以 `event_id`、原始 `tags` 值或任何使用者可控的無界字串作為 label。
-- 跨越行程邊界時（HTTP → Kafka → worker），trace context MUST 透過訊息 header 傳遞。
-- 失敗路徑（重試、降級、dead-letter）MUST 與成功路徑一樣具備指標與日誌。
+- MUST emit at least one Prometheus metric covering whichever of traffic, latency, and failure
+  applies to that path.
+- MUST emit structured JSON logs carrying `trace_id`. Error logs MUST include an error
+  classification and enough context to locate the problem.
+- Metric labels MUST be bounded in cardinality. Using `event_id`, raw `tags` values, or any
+  unbounded user-controlled string as a label is forbidden.
+- When crossing a process boundary (HTTP → Kafka → worker), trace context MUST be propagated
+  through message headers.
+- Failure paths — retries, degradation, dead-letter — MUST carry metrics and logs to the same
+  standard as success paths.
 
-**關卡**：plan 中任何新增的處理路徑，都能對應到具體的指標名稱與日誌事件；無法對應者視為違反。
+**Gate**: every new processing path in a plan maps to a named metric and a named log event.
+Anything that cannot be mapped is a violation.
 
-**理由**：本專案的核心價值主張是「能量測、能除錯的分散式系統」。事後補插樁必然遺漏失敗路徑，
-而失敗路徑正是需要被觀測的部分。
+**Rationale**: this project's core value proposition is a distributed system that can be measured
+and debugged. Instrumentation added after the fact reliably misses the failure paths, which are
+exactly the paths that need to be observed.
 
-### II. 測試分層 (Layered Testing) — NON-NEGOTIABLE
+### II. Layered Testing — NON-NEGOTIABLE
 
-測試策略依「是否跨越行程邊界」分層，且各層都有強制要求：
+The testing strategy is layered by whether a process boundary is crossed, and each layer is
+mandatory:
 
-- **純邏輯 MUST 用單元測試**：schema 驗證、cache key 生成、重試分類、查詢參數驗證、
-  API 錯誤映射。這些邏輯 MUST 可在不啟動任何外部依賴的情況下測試。
-- **跨越 Kafka / ClickHouse / Redis 邊界的行為 MUST 用整合測試**，對真實服務執行
-  （testcontainers 或 docker compose）。禁止以 mock 取代這些邊界的正確性驗證。
-- **端對端行為 MUST 對完整 container stack 驗證**，涵蓋 ingest → 處理 → 查詢的完整鏈路，
-  以及 dead-letter、重複事件、快取命中三條分支路徑。
-- 修正缺陷時 MUST 先新增能重現該缺陷的測試。
-- 涉及正確性宣稱的行為（聚合值、去重、無遺失）MUST 以已知 fixture 驗證期望值，
-  不得僅斷言「沒有錯誤」。
+- **Pure logic MUST be unit tested**: schema validation, cache key generation, retry
+  classification, query parameter validation, API error mapping. This logic MUST be testable
+  without starting any external dependency.
+- **Behavior crossing a Kafka / ClickHouse / Redis boundary MUST have integration tests** running
+  against real services (testcontainers or docker compose). Substituting mocks for correctness
+  verification at these boundaries is forbidden.
+- **End-to-end behavior MUST be verified against the full container stack**, exercising the
+  ingest → process → query chain plus the dead-letter, duplicate-event, and cache-hit branches.
+- Fixing a defect MUST begin with a test that reproduces it.
+- Behavior involving a correctness claim (aggregate values, deduplication, no loss) MUST assert
+  expected values against a known fixture. Asserting merely that no error occurred is insufficient.
 
-**關卡**：每個 feature 的 tasks 都必須同時包含其所屬層級的測試任務；只有單元測試而
-觸及外部依賴的 feature 視為違反。
+**Gate**: every feature's task list contains test tasks for the layers it touches. A feature that
+crosses an external dependency but ships only unit tests is a violation.
 
-**理由**：分散式系統的缺陷幾乎都出現在行程邊界上。以 mock 通過的測試對這類缺陷零覆蓋。
+**Rationale**: defects in distributed systems almost always live at process boundaries. A test
+suite that passes on mocks provides zero coverage of that class of defect.
 
-### III. 可重現的量測 (Reproducible Measurement)
+### III. Reproducible Measurement
 
-所有效能與可靠性數字 MUST 可由他人重跑得出：
+Every performance and reliability number MUST be reproducible by someone else:
 
-- 效能數字 MUST 來自已提交進版控的腳本與設定，不得來自手動執行的一次性指令。
-- 發布任何量測結果時 MUST 一併記錄：硬體規格、執行指令、資料集與其產生方式、
-  完整設定、執行時長、原始輸出。
-- 目標值與量測結果 MUST 在文件中明確區分。README 中的建議目標在實際量測完成前
-  MUST NOT 被寫成已達成的成果。
-- 比較型實驗（例如快取前後、worker 數量擴展）MUST 除受測變因外保持其他條件一致，
-  並記錄該變因為何。
-- 可靠性宣稱（例如「重啟不遺失事件」）MUST 附上試驗次數與成功次數，而非定性描述。
+- Performance numbers MUST come from scripts and configuration committed to version control, never
+  from a one-off command typed by hand.
+- Publishing any measurement MUST include: hardware specification, command executed, dataset and
+  how it was generated, full configuration, run duration, and raw output.
+- Target values and measured results MUST be visually distinct in documentation. The suggested
+  targets in the README MUST NOT be written as achieved outcomes before they are measured.
+- Comparative experiments (cache on/off, worker count scaling) MUST hold every condition constant
+  except the variable under test, and MUST record what that variable was.
+- Reliability claims ("no events lost across restarts") MUST state trial count and success count
+  rather than a qualitative description.
 
-**關卡**：任何在 spec、plan 或文件中出現的數字，都能追溯到一支已提交的腳本與一份原始輸出。
+**Gate**: every number appearing in a spec, plan, or document traces back to a committed script and
+a raw output file.
 
-**理由**：無法重現的效能數字在技術審視下沒有價值，且容易在不知情的情況下變成不實陳述。
+**Rationale**: performance numbers that cannot be reproduced carry no weight under technical
+scrutiny, and they easily become misrepresentation without anyone intending it.
 
-### IV. 至少一次交付與應用層冪等 (At-Least-Once + Idempotency)
+### IV. At-Least-Once Delivery & Application-Level Idempotency
 
-事件處理的正確性語意為「至少一次交付 + 應用層冪等」，實作 MUST 遵守：
+The correctness semantics for event processing are at-least-once delivery plus application-level
+idempotency. Implementations MUST observe the following:
 
-- Kafka offset MUST 在對應事件成功持久化之後才 commit。禁止先 commit 再處理。
-- 相同 `event_id` 重複進入系統 MUST NOT 產生第二筆有效分析紀錄，且此性質 MUST 有測試覆蓋。
-- Ingestion API MUST 在 Kafka 確認寫入之後才回應成功（`202`）。Kafka 不可用時
-  MUST 回錯誤，禁止回成功。
-- 處理失敗 MUST 明確分類為暫時性或永久性；暫時性失敗 MUST 以有上限的退避重試，
-  永久性失敗或超過重試上限者 MUST 進入 dead-letter topic。
-- Dead-letter 紀錄 MUST 保留原始 payload 與足以判斷失敗原因的中繼資料，且 MUST 可被檢視。
-- Worker 收到終止訊號時 MUST 先完成或放棄當前批次到一個安全狀態再退出，
-  且已被 Kafka 確認的事件在此過程中 MUST NOT 遺失。
+- Kafka offsets MUST be committed only after the corresponding events have been persisted.
+  Committing before processing is forbidden.
+- The same `event_id` entering the system twice MUST NOT produce a second valid analytical record,
+  and this property MUST be covered by a test.
+- The ingestion API MUST return success (`202`) only after Kafka has acknowledged the write. When
+  Kafka is unavailable it MUST return an error; returning success is forbidden.
+- Processing failures MUST be explicitly classified as transient or permanent. Transient failures
+  MUST be retried with bounded backoff; permanent failures and those exceeding the retry limit
+  MUST be routed to a dead-letter topic.
+- Dead-letter records MUST retain the original payload and enough metadata to determine the cause
+  of failure, and MUST be inspectable.
+- On receiving a termination signal, a worker MUST bring its current batch to a safe state —
+  completing or abandoning it — before exiting, and events already acknowledged by Kafka MUST NOT
+  be lost in the process.
 
-**關卡**：plan 中每一處寫入外部系統的操作，都能說明其失敗時的重試分類、offset 行為與冪等依據。
+**Gate**: every write to an external system in a plan can state its failure classification, its
+offset behavior, and the basis for its idempotency.
 
-**理由**：這是本專案最核心的技術宣稱。任何一處違反都會使「無遺失、無重複」的整體宣稱失效。
+**Rationale**: this is the project's central technical claim. A violation anywhere invalidates the
+"no loss, no duplicates" claim everywhere.
 
-### V. 簡潔優先與範圍紀律 (Simplicity & Scope Discipline)
+### V. Simplicity & Scope Discipline
 
-架構複雜度 MUST 有明確理由，且 MUST NOT 超出專案宣告的範圍：
+Architectural complexity MUST be justified, and MUST NOT exceed the project's declared scope:
 
-- MUST NOT 自行實作 Kafka、ClickHouse、Redis 或任何共識演算法（Raft/Paxos）。
-- MUST NOT 引入 service mesh、多區域 active-active 部署，或將系統拆成數十個微服務。
-- MUST NOT 建置完整的商用監控 UI，MUST NOT 加入 AI/LLM 功能。
-- 專案 MUST 維持在審視者能快速理解架構的規模；元件數量的增加 MUST 在 plan 中說明理由。
-- 新增抽象層、介面或間接層 MUST 對應到一個當下已存在的具體需求，不得為了假想的未來彈性。
-- Stretch goals MUST 在 MVP 驗收條件全數通過之後才開始實作。
+- MUST NOT implement Kafka, ClickHouse, Redis, or any consensus algorithm (Raft/Paxos) from
+  scratch.
+- MUST NOT introduce a service mesh, multi-region active-active deployment, or a split into dozens
+  of microservices.
+- MUST NOT build a full commercial monitoring UI, and MUST NOT add AI/LLM features.
+- The project MUST stay small enough that a reviewer can understand its architecture quickly. Any
+  increase in component count MUST be justified in the plan.
+- A new abstraction, interface, or layer of indirection MUST correspond to a concrete need that
+  exists today, never to hypothetical future flexibility.
+- Stretch goals MUST NOT begin until every MVP acceptance criterion passes.
 
-**關卡**：plan 中每個新增的元件、套件或抽象層，都能指出它解決哪一個當下的具體問題；
-無法指出者列入 Complexity Tracking 並說明為何較簡單的替代方案不可行。
+**Gate**: every new component, package, or abstraction in a plan names the concrete problem it
+solves today. Anything that cannot is recorded in Complexity Tracking along with why the simpler
+alternative was rejected.
 
-**理由**：本專案的目的是清楚展示分散式處理能力。過度設計會同時稀釋展示效果與可維護性。
+**Rationale**: the purpose of this project is to demonstrate distributed processing clearly.
+Over-engineering dilutes both the demonstration and the maintainability.
 
-## 技術與範圍限制 (Technology & Scope Constraints)
+## Technology & Scope Constraints
 
-- **語言與執行環境**：後端服務一律使用 Go。共用邏輯放在 `internal/`，
-  可執行檔放在 `cmd/api` 與 `cmd/worker`。
-- **既定技術選型**：事件串流使用 Kafka，分析儲存使用 ClickHouse，快取使用 Redis，
-  可觀測性使用 OpenTelemetry 與 Prometheus，容器化使用 Docker 與 Docker Compose，
-  編排使用 Kubernetes，負載測試使用 k6，CI 使用 GitHub Actions。
-  更換上述任一項 MUST 修訂本憲章。
-- **設定管理**：所有可變設定 MUST 由環境變數提供，MUST 有預設值，
-  且 MUST 在服務啟動時驗證；設定錯誤 MUST 導致啟動失敗而非執行期才發現。
-- **API 契約**：對外 HTTP 端點以 `/v1` 為前綴。已發布端點的破壞性變更 MUST 提升憲章 MAJOR 版本。
-  錯誤回應 MUST 使用統一的 JSON 結構。
-- **資料 schema**：遙測事件 schema MUST 帶版本欄位。Worker MUST 驗證版本並拒絕無法處理的版本。
-- **健康檢查**：liveness 探針 MUST 僅反映行程存活；readiness 探針 MUST 反映依賴可用性
-  並在失敗時指出是哪一個依賴。
-- **本地環境**：`docker compose up` MUST 能啟動 demo 所需的全部依賴，且各依賴 MUST 有 healthcheck。
+- **Language and runtime**: backend services are written in Go. Shared logic lives under
+  `internal/`; binaries live under `cmd/api` and `cmd/worker`.
+- **Fixed technology choices**: Kafka for event streaming, ClickHouse for analytical storage, Redis
+  for caching, OpenTelemetry and Prometheus for observability, Docker and Docker Compose for
+  containerization, Kubernetes for orchestration, k6 for load testing, GitHub Actions for CI.
+  Replacing any of these requires amending this constitution.
+- **Configuration**: all mutable configuration MUST come from environment variables, MUST have
+  defaults, and MUST be validated at service startup. A configuration error MUST cause startup to
+  fail rather than surfacing at runtime.
+- **API contract**: external HTTP endpoints are prefixed with `/v1`. A breaking change to a
+  published endpoint MUST bump this constitution's MAJOR version. Error responses MUST use a
+  uniform JSON structure.
+- **Data schema**: the telemetry event schema MUST carry a version field. Workers MUST validate
+  the version and reject versions they cannot process.
+- **Health checks**: the liveness probe MUST reflect only process liveness. The readiness probe
+  MUST reflect dependency availability and MUST name which dependency failed.
+- **Local environment**: `docker compose up` MUST start every dependency the demo needs, and each
+  dependency MUST define a healthcheck.
 
-## 開發流程與品質關卡 (Development Workflow & Quality Gates)
+## Development Workflow & Quality Gates
 
-- **Feature 工作流**：每個 feature 依序執行 `/speckit.specify` → `/speckit.clarify`（設計取捨未定時）
-  → `/speckit.plan` → `/speckit.tasks` → `/speckit.analyze` → `/speckit.implement`。
-  Feature 的拆分與依賴順序以 `FEATURES.md` 為準。
-- **憲章關卡**：`/speckit.plan` 產生的 Constitution Check MUST 逐條對照本檔的五項原則。
-  任何違反 MUST 記入該 plan 的 Complexity Tracking 表並說明較簡單方案為何不可行；
-  無法說明者 MUST 修改設計而非放行。
-- **依賴方向**：後續 feature MUST NOT 回頭破壞前序 feature 的對外契約。
-  若必須修改既有元件（例如集中式插樁），該 feature 的 spec MUST 明確列出受影響的既有檔案與範圍。
-- **CI 關卡**：每個 PR MUST 通過 build、`go vet`、lint 與單元測試。
-  觸及外部依賴的 feature MUST 在 CI 中執行其整合測試（可用縮小的資料量）。
-- **合併條件**：feature 的驗收條件全數可驗證通過，且測試分層要求已滿足，方可合併。
-- **文件同步**：變更對外 API、指標名稱或部署方式時，MUST 在同一份變更中更新對應文件。
+- **Feature workflow**: each feature runs `/speckit.specify` → `/speckit.clarify` (when design
+  trade-offs are unresolved) → `/speckit.plan` → `/speckit.tasks` → `/speckit.analyze` →
+  `/speckit.implement`, in that order. Feature decomposition and dependency order are governed by
+  `FEATURES.md`.
+- **Constitution gate**: the Constitution Check produced by `/speckit.plan` MUST be evaluated
+  against all five principles above, one by one. Any violation MUST be recorded in that plan's
+  Complexity Tracking table with an explanation of why the simpler alternative is unworkable. A
+  violation that cannot be explained MUST be designed away rather than waved through.
+- **Dependency direction**: a later feature MUST NOT break the external contract of an earlier one.
+  When modifying an existing component is unavoidable (for example, centralizing instrumentation),
+  that feature's spec MUST list the affected existing files and the scope of the change.
+- **CI gate**: every pull request MUST pass build, `go vet`, lint, and unit tests. Features that
+  touch an external dependency MUST run their integration tests in CI, with a reduced dataset where
+  necessary.
+- **Merge condition**: a feature may merge once all of its acceptance criteria are verifiably met
+  and its testing-layer obligations are satisfied.
+- **Documentation sync**: changes to an external API, a metric name, or the deployment method MUST
+  update the corresponding documentation in the same change.
 
 ## Governance
 
-- **地位**：本憲章優先於所有其他開發實務與個人偏好。與本檔衝突的既有做法 MUST 被修正。
-- **修訂程序**：修訂 MUST 以變更本檔的方式提出，並在同一份變更中包含：
-  (a) 修訂內容，(b) 更新後的 Sync Impact Report，(c) 版本號調整，(d) 受影響既有程式碼的處理計畫
-  （立即修正或明確記錄的技術債）。
-- **版本政策**（語意化版本）：
-  - **MAJOR**：移除原則、重新定義既有原則使其不再向後相容，或變更既定技術選型與已發布 API 契約。
-  - **MINOR**：新增原則或章節，或對既有指引作實質性擴充。
-  - **PATCH**：措辭釐清、錯字修正、不改變語意的調整。
-- **合規審查**：所有 PR 與程式碼審查 MUST 驗證本憲章的遵循情況。
-  每完成一個里程碑（見 `FEATURES.md` 的 M1–M6）MUST 檢視一次憲章是否仍反映專案實況。
-- **例外處理**：違反原則的例外 MUST 記錄在對應 feature 的 plan 中，
-  包含具體理由、影響範圍與移除該例外的條件。未記錄的例外一律視為缺陷。
-- **執行期指引**：專案範圍與需求以 `README.md` 為準，feature 拆分與依賴順序以 `FEATURES.md` 為準；
-  兩者皆 MUST NOT 與本憲章衝突，衝突時以本憲章為準。
+- **Standing**: this constitution supersedes all other development practices and personal
+  preferences. Existing practice that conflicts with it MUST be corrected.
+- **Amendment procedure**: amendments MUST be proposed as a change to this file, and that change
+  MUST include: (a) the amendment itself, (b) an updated Sync Impact Report, (c) the version
+  adjustment, and (d) a plan for handling affected existing code — either fixed immediately or
+  recorded as explicit technical debt.
+- **Versioning policy** (semantic versioning):
+  - **MAJOR**: removing a principle, redefining an existing principle in a backward-incompatible
+    way, or changing a fixed technology choice or a published API contract.
+  - **MINOR**: adding a principle or section, or materially expanding existing guidance.
+  - **PATCH**: wording clarifications, typo fixes, translations, and other changes that do not
+    alter meaning.
+- **Compliance review**: all pull requests and code reviews MUST verify compliance with this
+  constitution. At each milestone completion (see M1–M6 in `FEATURES.md`), the constitution MUST be
+  reviewed to confirm it still reflects the state of the project.
+- **Exceptions**: an exception to a principle MUST be recorded in the corresponding feature's plan,
+  including the specific justification, the blast radius, and the condition under which the
+  exception is removed. An unrecorded exception is treated as a defect.
+- **Runtime guidance**: project scope and requirements are governed by `README.md`; feature
+  decomposition and dependency order are governed by `FEATURES.md`. Neither MUST conflict with this
+  constitution; where they do, this constitution prevails.
 
-**Version**: 1.0.0 | **Ratified**: 2026-08-24 | **Last Amended**: 2026-08-24
+**Version**: 1.0.1 | **Ratified**: 2026-08-24 | **Last Amended**: 2026-08-26

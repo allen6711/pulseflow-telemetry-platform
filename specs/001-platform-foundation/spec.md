@@ -1,4 +1,4 @@
-# Feature Specification: 平台基礎與本地開發環境 (Platform Foundation)
+# Feature Specification: Platform Foundation & Local Development Environment
 
 **Feature Branch**: `001-platform-foundation`
 
@@ -6,280 +6,340 @@
 
 **Status**: Draft
 
-**Input**: User description: "建立 PulseFlow 的專案骨架與本地開發環境。內容包含：Go module 與 cmd/api、cmd/worker 兩個可啟動且支援 graceful shutdown 的執行檔；internal/config 提供以環境變數為主、具預設值與啟動時驗證的設定載入；使用 log/slog 的結構化 JSON 日誌套件，保留 trace_id 欄位；docker-compose.yml 啟動 Kafka、ClickHouse、Redis、Prometheus 並附 healthcheck 與固定映像版本；API 提供 /v1/health/live 純存活探針與 /v1/health/ready 依賴感知探針（檢查 Kafka、ClickHouse、Redis，失敗時回 503 並列出失敗依賴）；Makefile 提供 build、test、lint、compose 生命週期指令；GitHub Actions 執行 build、go vet 與單元測試。此 feature 不包含任何業務邏輯與 Kubernetes 部署。"
+**Input**: User description: "Build the PulseFlow project skeleton and local development environment. This includes: a Go module with two runnable binaries, cmd/api and cmd/worker, both supporting graceful shutdown; internal/config providing environment-variable-driven configuration with sensible defaults and startup-time validation; a structured JSON logging package built on log/slog that reserves a trace_id field; a docker-compose.yml that starts Kafka, ClickHouse, Redis, and Prometheus with healthchecks and pinned image versions; an API exposing /v1/health/live as a pure liveness probe and /v1/health/ready as a dependency-aware readiness probe that checks Kafka, ClickHouse, and Redis and returns 503 listing the failing dependencies; a Makefile providing build, test, lint, and compose lifecycle commands; and a GitHub Actions workflow running build, go vet, and unit tests. This feature includes no business logic and no Kubernetes deployment."
 
 ## User Scenarios & Testing *(mandatory)*
 
-本 feature 的使用者是**開發者**與**營運者**（本專案情境下為同一人，但需求分開描述）。
-它交付的價值是「一個可啟動、可觀察、可驗證的空殼平台」，讓後續每個 feature 都能在其上疊加，
-而不必各自重建環境、設定與健康檢查。
+The users of this feature are the **developer** and the **operator**. In this project they are the
+same person, but their needs are described separately because they want different things from the
+system.
 
-### User Story 1 - 一道指令啟動完整本地環境 (Priority: P1)
+What this feature delivers is a platform shell that starts, can be observed, and can be verified —
+so that every later feature builds on top of it instead of re-inventing its own environment,
+configuration, and health checking.
 
-開發者在一台乾淨的機器上取得專案後，執行單一指令即可啟動平台運作所需的全部支撐服務
-（事件串流、分析儲存、快取、指標收集）以及本專案的兩個服務行程，並能立即看出每項服務
-是否已就緒。開發者不需要手動安裝任何支撐服務，也不需要依照特定順序逐一啟動。
+### User Story 1 - One Command Starts the Whole Local Environment (Priority: P1)
 
-**Why this priority**: 沒有可重複啟動的環境，後續所有 feature 都無法被開發或驗證。
-這是整個專案唯一沒有前置依賴的起點。
+A developer who has just obtained the project on a clean machine runs a single command and gets
+every supporting service the platform needs — event streaming, analytical storage, caching, and
+metrics collection — plus this project's two service processes. They can immediately see whether
+each service is ready. They do not install any supporting service by hand, and they do not start
+things in a particular order.
 
-**Independent Test**: 在未安裝任何支撐服務的機器上 clone 專案並執行啟動指令，
-觀察所有服務是否進入就緒狀態，即可完整驗證本故事，且它本身就交付「可用的開發環境」這項價值。
+**Why this priority**: without a repeatable environment, no later feature can be developed or
+verified. This is the one starting point in the project with no prerequisites.
+
+**Independent Test**: on a machine with no supporting services installed, clone the project, run
+the start command, and observe whether all services reach a ready state. That alone fully tests
+this story, and it delivers the standalone value of a working development environment.
 
 **Acceptance Scenarios**:
 
-1. **Given** 一台僅具備容器執行環境、未安裝任何支撐服務的乾淨機器，**When** 開發者執行單一啟動指令，**Then** 事件串流、分析儲存、快取、指標收集四項支撐服務與本專案的擷取服務、處理服務全部啟動並回報就緒。
-2. **Given** 環境已啟動，**When** 開發者查詢各支撐服務的健康狀態，**Then** 每項服務都回報明確的就緒或未就緒狀態，而非僅有「容器存在」。
-3. **Given** 環境已啟動，**When** 開發者執行關閉指令，**Then** 所有服務停止且不留下會影響下次啟動的殘留狀態。
-4. **Given** 開發者重複執行啟動指令兩次，**When** 第二次啟動完成，**Then** 結果與第一次一致，不因殘留狀態而失敗。
+1. **Given** a clean machine with only a container runtime and no supporting services installed, **When** the developer runs the single start command, **Then** event streaming, analytical storage, caching, and metrics collection all start, along with this project's ingestion and processing services, and all report ready.
+2. **Given** the environment is running, **When** the developer inspects the health of each supporting service, **Then** each reports an explicit ready or not-ready state rather than merely "the container exists".
+3. **Given** the environment is running, **When** the developer runs the stop command, **Then** all services stop and leave behind no residual state that would affect the next startup.
+4. **Given** the developer runs the start command twice in a row, **When** the second startup completes, **Then** the result matches the first, with no failure caused by residual state.
 
 ---
 
-### User Story 2 - 以健康探針區分「行程存活」與「可接受流量」 (Priority: P1)
+### User Story 2 - Health Probes Distinguish "Process Alive" from "Ready for Traffic" (Priority: P1)
 
-營運者需要兩種語意不同的健康訊號：一種只回答「這個行程還活著嗎」，用來決定是否該重啟它；
-另一種回答「這個行程現在能正常服務嗎」，用來決定是否該把流量導給它。當某項依賴不可用時，
-第二種訊號必須轉為未就緒，並明確指出是哪一項依賴出問題，而第一種訊號必須維持成功，
-以免造成不必要的重啟循環。
+An operator needs two health signals with distinct meanings. One answers only "is this process
+still alive?" and drives the decision to restart it. The other answers "can this process serve
+correctly right now?" and drives the decision to route traffic to it. When a dependency becomes
+unavailable, the second signal must turn not-ready and name the failing dependency, while the first
+must keep succeeding so that no needless restart loop begins.
 
-**Why this priority**: 這是後續容器編排與所有故障演練的基礎。若兩種訊號語意混淆，
-依賴短暫不可用會導致服務被反覆重啟，使可靠性測試失去意義。
+**Why this priority**: this underpins later container orchestration and every failure drill. If the
+two signals blur together, a brief dependency outage restarts the service repeatedly and the
+reliability tests stop meaning anything.
 
-**Independent Test**: 啟動環境後逐一停掉單項依賴，觀察兩個探針的回應差異，即可完整驗證。
+**Independent Test**: start the environment, stop one dependency at a time, and observe how the two
+probes differ in their responses. That fully tests this story.
 
 **Acceptance Scenarios**:
 
-1. **Given** 所有依賴皆正常，**When** 查詢就緒探針，**Then** 回應成功狀態並列出每項依賴為健康。
-2. **Given** 分析儲存服務被停止，**When** 查詢就緒探針，**Then** 回應「服務不可用」狀態碼，且回應內容明確指出分析儲存為失敗的依賴。
-3. **Given** 分析儲存服務被停止，**When** 查詢存活探針，**Then** 仍回應成功。
-4. **Given** 多項依賴同時不可用，**When** 查詢就緒探針，**Then** 回應內容列出**全部**失敗的依賴，而非只回報第一個遇到的。
-5. **Given** 依賴恢復可用，**When** 再次查詢就緒探針，**Then** 在可接受的時間內自動回復為成功，無需重啟服務。
-6. **Given** 某項依賴回應緩慢，**When** 查詢就緒探針，**Then** 探針在設定的逾時時間內回應，不會無限等待。
+1. **Given** all dependencies are healthy, **When** the readiness probe is queried, **Then** it responds with a success status and lists each dependency as healthy.
+2. **Given** the analytical storage service is stopped, **When** the readiness probe is queried, **Then** it responds with a service-unavailable status and the response body explicitly identifies analytical storage as the failing dependency.
+3. **Given** the analytical storage service is stopped, **When** the liveness probe is queried, **Then** it still responds with success.
+4. **Given** several dependencies are unavailable at once, **When** the readiness probe is queried, **Then** the response lists **all** failing dependencies, not just the first one encountered.
+5. **Given** a dependency recovers, **When** the readiness probe is queried again, **Then** it returns to success within an acceptable interval, with no service restart required.
+6. **Given** a dependency is responding slowly, **When** the readiness probe is queried, **Then** the probe responds within its configured timeout rather than waiting indefinitely.
 
 ---
 
-### User Story 3 - 設定錯誤在啟動時立即失敗 (Priority: P2)
+### User Story 3 - Configuration Errors Fail at Startup (Priority: P2)
 
-開發者以環境變數調整服務行為（依賴位址、監聽埠、日誌等級等）。每項設定都有可用的預設值，
-使本機開發不需先填一堆變數；但只要提供了不合法的值，服務必須在啟動當下就失敗並說明原因，
-而不是啟動成功後在處理流量時才出錯。
+A developer adjusts service behavior through environment variables — dependency addresses, listen
+port, log level. Every setting has a usable default so local development needs no upfront variable
+wrangling. But the moment an invalid value is supplied, the service must fail at startup and say
+why, rather than starting successfully and misbehaving once it handles traffic.
 
-**Why this priority**: 設定錯誤若延遲到執行期才顯現，會被誤判為程式缺陷，
-在後續的效能與可靠性實驗中造成難以追查的雜訊。
+**Why this priority**: a configuration error that only surfaces at runtime gets mistaken for a code
+defect, and it introduces noise that is hard to trace during the later performance and reliability
+experiments.
 
-**Independent Test**: 分別以合法設定、缺漏設定與不合法設定啟動服務，觀察啟動結果與錯誤訊息。
+**Independent Test**: start the service three times — with valid configuration, with missing
+configuration, and with invalid configuration — and observe the outcome and error message each
+time.
 
 **Acceptance Scenarios**:
 
-1. **Given** 未提供任何環境變數，**When** 在本機開發環境啟動服務，**Then** 服務以預設值成功啟動。
-2. **Given** 某項設定被賦予格式錯誤的值（例如非數字的埠號），**When** 啟動服務，**Then** 服務啟動失敗，並在錯誤訊息中指出是哪一項設定與為何不合法。
-3. **Given** 某項設定的值超出允許範圍，**When** 啟動服務，**Then** 服務啟動失敗並指出允許範圍。
-4. **Given** 設定驗證失敗，**When** 檢查服務狀態，**Then** 服務未進入接受流量的狀態，也未部分初始化。
-5. **Given** 設定中包含敏感值，**When** 服務輸出啟動資訊，**Then** 敏感值不以明文出現在日誌中。
+1. **Given** no environment variables are supplied, **When** the service starts in a local development environment, **Then** it starts successfully using defaults.
+2. **Given** a setting receives a malformed value (for example a non-numeric port), **When** the service starts, **Then** startup fails and the error message names the setting and explains why the value is invalid.
+3. **Given** a setting receives a value outside the permitted range, **When** the service starts, **Then** startup fails and the error message states the permitted range.
+4. **Given** configuration validation has failed, **When** the service state is inspected, **Then** the service has neither entered a traffic-accepting state nor partially initialized.
+5. **Given** configuration contains a sensitive value, **When** the service emits its startup information, **Then** the sensitive value does not appear in cleartext in the logs.
 
 ---
 
-### User Story 4 - 收到終止訊號時優雅關閉 (Priority: P2)
+### User Story 4 - Graceful Shutdown on a Termination Signal (Priority: P2)
 
-營運者終止服務時，服務必須停止接受新工作、完成或安全放棄手上的工作、釋放對外連線，
-然後在有限的寬限時間內退出。若超過寬限時間仍未完成，服務必須強制退出而不是無限期停留。
+When an operator terminates a service, it must stop accepting new work, complete or safely abandon
+the work in hand, release its outbound connections, and then exit within a bounded grace period. If
+it has not finished by the end of that period, it must force its own exit rather than hanging
+indefinitely.
 
-**Why this priority**: 後續的 worker 重啟與 rebalance 實驗（F04、F05、F09）
-完全建立在「終止是可預期的」這個前提上。若關閉行為不確定，那些實驗的結果無法解釋。
+**Why this priority**: the later worker restart and rebalance experiments (F04, F05, F09) rest
+entirely on termination being predictable. If shutdown behavior is uncertain, the results of those
+experiments cannot be interpreted.
 
-**Independent Test**: 對服務送出終止訊號並觀察其關閉序列與退出時間。
+**Independent Test**: send a termination signal to the service and observe its shutdown sequence
+and exit timing.
 
 **Acceptance Scenarios**:
 
-1. **Given** 擷取服務正在處理請求，**When** 送出終止訊號，**Then** 服務停止接受新請求，但讓進行中的請求完成後才退出。
-2. **Given** 服務正在關閉，**When** 查詢就緒探針，**Then** 回應未就緒，使流量不再被導入。
-3. **Given** 服務在寬限時間內完成清理，**When** 觀察退出行為，**Then** 服務以成功狀態退出並輸出關閉完成的日誌。
-4. **Given** 清理工作超過寬限時間，**When** 寬限時間耗盡，**Then** 服務強制退出並記錄「逾時強制關閉」事件。
-5. **Given** 送出終止訊號，**When** 觀察處理服務的行為，**Then** 其關閉序列與擷取服務具備相同的語意（停止取新工作 → 清理 → 退出）。
+1. **Given** the ingestion service is handling requests, **When** a termination signal arrives, **Then** it stops accepting new requests but lets in-flight requests finish before exiting.
+2. **Given** the service is shutting down, **When** the readiness probe is queried, **Then** it responds not-ready so that traffic stops being routed to it.
+3. **Given** the service finishes cleanup within the grace period, **When** its exit is observed, **Then** it exits with a success status and emits a shutdown-complete log entry.
+4. **Given** cleanup exceeds the grace period, **When** the grace period expires, **Then** the service forces its exit and records a "forced shutdown on timeout" event.
+5. **Given** a termination signal is sent, **When** the processing service's behavior is observed, **Then** its shutdown sequence carries the same semantics as the ingestion service (stop taking new work → clean up → exit).
 
 ---
 
-### User Story 5 - 從結構化日誌追查單一請求 (Priority: P3)
+### User Story 5 - Trace a Single Request Through Structured Logs (Priority: P3)
 
-除錯者需要能以機器可解析的方式篩選日誌，並能用一個關聯識別碼把同一個請求在不同元件
-產生的日誌串起來。即使本 feature 尚未有跨行程的請求流，日誌格式與關聯識別碼欄位必須
-在此時就固定下來，讓後續元件直接沿用。
+Someone debugging needs to filter logs in a machine-parseable way and needs one correlation
+identifier that ties together the log entries a single request produced across different
+components. Even though this feature has no cross-process request flow yet, the log format and the
+correlation identifier field must be fixed now so later components adopt them directly.
 
-**Why this priority**: 這是憲章「可觀測性優先」的落地基礎。格式若在後期才統一，
-既有元件都需回頭改寫。但在本 feature 中尚無真實請求鏈路，故優先度低於前四項。
+**Why this priority**: this is where the constitution's "Observability First" principle lands. A
+format unified late forces every existing component to be rewritten. But this feature has no real
+request chain yet, so it ranks below the first four stories.
 
-**Independent Test**: 觸發若干事件後，將日誌輸出交由結構化解析工具處理，檢查欄位完整性。
+**Independent Test**: trigger a number of events, feed the log output to a structured parsing tool,
+and check field completeness.
 
 **Acceptance Scenarios**:
 
-1. **Given** 服務正在執行，**When** 產生任一筆日誌，**Then** 該筆日誌可被獨立解析為結構化紀錄，且包含時間戳、等級、服務名稱、版本、訊息與關聯識別碼欄位。
-2. **Given** 一個帶有關聯識別碼的請求進入服務，**When** 該請求產生多筆日誌，**Then** 所有相關日誌帶有相同的關聯識別碼。
-3. **Given** 請求未攜帶關聯識別碼，**When** 服務處理該請求，**Then** 服務產生一個新的識別碼並用於該請求的所有日誌。
-4. **Given** 設定的日誌等級為警告，**When** 產生資訊等級的日誌，**Then** 該筆日誌不被輸出。
-5. **Given** 發生錯誤，**When** 檢視錯誤日誌，**Then** 該筆日誌包含錯誤分類與足以定位問題的上下文欄位。
+1. **Given** the service is running, **When** any log entry is produced, **Then** that entry parses independently as a structured record containing timestamp, level, service name, version, message, and correlation identifier fields.
+2. **Given** a request carrying a correlation identifier enters the service, **When** that request produces several log entries, **Then** every related entry carries the same correlation identifier.
+3. **Given** a request arrives without a correlation identifier, **When** the service handles it, **Then** the service generates a new identifier and uses it for all of that request's logs.
+4. **Given** the configured log level is warning, **When** an info-level entry is produced, **Then** that entry is not emitted.
+5. **Given** an error occurs, **When** the error log is inspected, **Then** that entry contains an error classification and enough context fields to locate the problem.
 
 ---
 
-### User Story 6 - 提交變更時自動驗證 (Priority: P3)
+### User Story 6 - Changes Are Verified Automatically on Submission (Priority: P3)
 
-貢獻者提交變更後，自動化流程會編譯專案、執行靜態檢查與單元測試，並在合併前回報結果。
-貢獻者不需在本機記憶完整的檢查清單，且相同的檢查在本機可用單一指令重現。
+When a contributor submits a change, an automated pipeline compiles the project, runs static
+analysis and unit tests, and reports the outcome before merge. The contributor does not have to
+memorize the full checklist locally, and the same checks are reproducible locally through a single
+command.
 
-**Why this priority**: 保障後續 feature 的品質基線，但不影響本 feature 本身的功能交付。
+**Why this priority**: it protects the quality baseline for later features, but does not affect what
+this feature itself delivers.
 
-**Independent Test**: 提交一個刻意含有靜態檢查違規的變更，觀察自動化流程是否阻擋。
+**Independent Test**: submit a change that deliberately contains a static analysis violation and
+observe whether the pipeline blocks it.
 
 **Acceptance Scenarios**:
 
-1. **Given** 一個通過所有檢查的變更，**When** 提交變更，**Then** 自動化流程回報成功。
-2. **Given** 一個無法編譯的變更，**When** 提交變更，**Then** 自動化流程回報失敗並指出編譯錯誤。
-3. **Given** 一個含靜態檢查違規的變更，**When** 提交變更，**Then** 自動化流程回報失敗並指出違規位置。
-4. **Given** 一個含失敗單元測試的變更，**When** 提交變更，**Then** 自動化流程回報失敗並指出失敗的測試。
-5. **Given** 開發者在本機，**When** 執行本機檢查指令，**Then** 所執行的檢查項目與自動化流程一致。
+1. **Given** a change that passes every check, **When** it is submitted, **Then** the automated pipeline reports success.
+2. **Given** a change that does not compile, **When** it is submitted, **Then** the pipeline reports failure and identifies the compilation error.
+3. **Given** a change containing a static analysis violation, **When** it is submitted, **Then** the pipeline reports failure and identifies the location of the violation.
+4. **Given** a change containing a failing unit test, **When** it is submitted, **Then** the pipeline reports failure and identifies the failing test.
+5. **Given** a developer working locally, **When** they run the local check command, **Then** the checks executed match those run by the pipeline.
 
 ---
 
 ### Edge Cases
 
-- 啟動時某個支撐服務的埠號已被其他行程占用 → 啟動須明確失敗並指出衝突的埠，而非靜默降級。
-- 所有支撐服務同時不可用 → 就緒探針必須仍能回應（而非自己也掛掉），並列出全部失敗依賴。
-- 依賴在探針查詢途中恢復或斷開 → 探針回報當次查詢的結果即可，不得因此卡住或回傳不一致的部分結果。
-- 就緒探針被高頻查詢 → 檢查依賴的動作不得對依賴造成額外壓力（需有結果快取或最小查詢間隔）。
-- 服務啟動時依賴尚未就緒（容器啟動競態）→ 服務本身仍應成功啟動並回報未就緒，而非啟動失敗，
-  待依賴就緒後自動轉為就緒。
-- 終止訊號在服務啟動流程尚未完成時送達 → 服務須能安全中止啟動並退出，不留下半初始化狀態。
-- 連續送出兩次終止訊號 → 第二次應觸發立即退出，而非重複執行清理流程。
-- 日誌中出現含有換行或引號的內容 → 結構化格式須維持可解析。
-- 磁碟或記憶體資源不足導致支撐服務無法啟動 → 啟動指令須回報明確錯誤而非長時間等待。
+- A supporting service's port is already occupied by another process at startup → startup must fail
+  explicitly and name the conflicting port rather than silently degrading.
+- All supporting services are unavailable at once → the readiness probe must still respond (rather
+  than failing itself) and must list every failing dependency.
+- A dependency recovers or drops mid-probe → the probe reports the result of that particular check;
+  it must not hang or return an inconsistent partial result.
+- The readiness probe is queried at high frequency → checking dependencies must not impose
+  additional load on them (result caching or a minimum re-check interval is required).
+- Dependencies are not yet ready when the service starts (container startup race) → the service
+  itself must still start successfully and report not-ready, rather than failing to start, and must
+  become ready automatically once dependencies are up.
+- A termination signal arrives before startup has completed → the service must safely abort startup
+  and exit, leaving no half-initialized state.
+- Two termination signals arrive in succession → the second must trigger immediate exit rather than
+  running the cleanup sequence again.
+- Log content contains newlines or quotation marks → the structured format must remain parseable.
+- Insufficient disk or memory prevents a supporting service from starting → the start command must
+  report a clear error rather than waiting indefinitely.
 
 ## Requirements *(mandatory)*
 
 ### Functional Requirements
 
-**環境與生命週期**
+**Environment and Lifecycle**
 
-- **FR-001**: 系統 MUST 提供單一指令啟動本地開發所需的全部支撐服務（事件串流、分析儲存、快取、指標收集）與本專案的擷取服務、處理服務。
-- **FR-002**: 每項支撐服務 MUST 定義健康檢查，使啟動流程能區分「容器已建立」與「服務已可用」。
-- **FR-003**: 所有支撐服務 MUST 以固定版本啟動，MUST NOT 使用會隨時間變動的浮動版本標籤。
-- **FR-004**: 系統 MUST 提供對應的關閉指令，且重複執行啟動指令 MUST 得到一致結果。
-- **FR-005**: 系統 MUST 提供單一指令入口執行建置、測試、靜態檢查與環境生命週期操作。
+- **FR-001**: The system MUST provide a single command that starts every supporting service required for local development (event streaming, analytical storage, caching, metrics collection) together with this project's ingestion and processing services.
+- **FR-002**: Every supporting service MUST define a health check so that the startup flow can distinguish "container created" from "service available".
+- **FR-003**: All supporting services MUST start at pinned versions. Floating version tags that change over time MUST NOT be used.
+- **FR-004**: The system MUST provide a corresponding stop command, and repeated execution of the start command MUST produce a consistent result.
+- **FR-005**: The system MUST provide a single command entry point for build, test, static analysis, and environment lifecycle operations.
 
-**健康探針**
+**Health Probes**
 
-- **FR-006**: 擷取服務 MUST 提供存活探針端點 `/v1/health/live`，其結果 MUST 僅反映行程本身是否存活，MUST NOT 因任何外部依賴不可用而失敗。
-- **FR-007**: 擷取服務 MUST 提供就緒探針端點 `/v1/health/ready`，其結果 MUST 反映事件串流、分析儲存、快取三項依賴的可用性。
-- **FR-008**: 當任一依賴不可用時，就緒探針 MUST 回應「服務不可用」狀態碼，且回應內容 MUST 列出**每一項**依賴的名稱與其個別狀態。
-- **FR-009**: 就緒探針的依賴檢查 MUST 有逾時上限，逾時 MUST 視為該依賴不可用。
-- **FR-010**: 就緒探針 MUST 對依賴檢查結果設有最小重新檢查間隔，使高頻查詢不會等比放大對依賴的壓力。
-- **FR-011**: 依賴恢復後，就緒探針 MUST 在最小重新檢查間隔內自動回復為成功，MUST NOT 需要重啟服務。
-- **FR-012**: 就緒探針的回應 MUST NOT 包含連線字串、憑證或其他敏感設定值。
-- **FR-013**: 處理服務 MUST 提供與擷取服務語意相同的存活與就緒探針。
+- **FR-006**: The ingestion service MUST expose a liveness probe endpoint at `/v1/health/live` whose result MUST reflect only whether the process itself is alive, and MUST NOT fail because any external dependency is unavailable.
+- **FR-007**: The ingestion service MUST expose a readiness probe endpoint at `/v1/health/ready` whose result MUST reflect the availability of the event streaming, analytical storage, and caching dependencies.
+- **FR-008**: When any dependency is unavailable, the readiness probe MUST respond with a service-unavailable status code, and the response body MUST list **every** dependency by name along with its individual status.
+- **FR-009**: The readiness probe's dependency checks MUST have a timeout bound, and a timeout MUST be treated as that dependency being unavailable.
+- **FR-010**: The readiness probe MUST apply a minimum re-check interval to dependency check results so that high-frequency queries do not proportionally amplify load on the dependencies.
+- **FR-011**: Once a dependency recovers, the readiness probe MUST return to success within the minimum re-check interval, and MUST NOT require a service restart.
+- **FR-012**: The readiness probe response MUST NOT contain connection strings, credentials, or other sensitive configuration values.
+- **FR-013**: The processing service MUST expose liveness and readiness probes with the same semantics as the ingestion service.
 
-**設定管理**
+**Configuration Management**
 
-- **FR-014**: 系統 MUST 以環境變數作為設定來源，且每項設定 MUST 具備可用於本機開發的預設值。
-- **FR-015**: 系統 MUST 在啟動時驗證全部設定，驗證失敗 MUST 導致啟動失敗。
-- **FR-016**: 設定驗證失敗的錯誤訊息 MUST 指出是哪一項設定、其收到的值為何不合法，以及允許的格式或範圍。
-- **FR-017**: 系統 MUST NOT 在設定驗證失敗時進入部分初始化或接受流量的狀態。
-- **FR-018**: 系統輸出設定資訊時 MUST 遮蔽敏感值。
+- **FR-014**: The system MUST source configuration from environment variables, and every setting MUST have a default usable for local development.
+- **FR-015**: The system MUST validate all configuration at startup, and validation failure MUST cause startup to fail.
+- **FR-016**: A configuration validation error message MUST identify which setting failed, why the value it received is invalid, and the permitted format or range.
+- **FR-017**: The system MUST NOT enter a partially initialized or traffic-accepting state when configuration validation fails.
+- **FR-018**: The system MUST mask sensitive values when emitting configuration information.
 
-**優雅關閉**
+**Graceful Shutdown**
 
-- **FR-019**: 兩個服務 MUST 回應終止訊號，並依「停止接受新工作 → 完成或安全放棄進行中工作 → 釋放資源 → 退出」的順序關閉。
-- **FR-020**: 服務進入關閉流程後，就緒探針 MUST 立即回報未就緒。
-- **FR-021**: 關閉流程 MUST 有可設定的寬限時間上限，超過上限 MUST 強制退出並記錄逾時事件。
-- **FR-022**: 服務 MUST 能安全處理在啟動流程尚未完成時送達的終止訊號。
-- **FR-023**: 重複送達的終止訊號 MUST 觸發立即退出，MUST NOT 重複執行清理流程。
+- **FR-019**: Both services MUST respond to a termination signal and shut down in the order: stop accepting new work → complete or safely abandon in-flight work → release resources → exit.
+- **FR-020**: Once a service enters its shutdown sequence, the readiness probe MUST immediately report not-ready.
+- **FR-021**: The shutdown sequence MUST have a configurable grace period bound, and exceeding it MUST force an exit and record a timeout event.
+- **FR-022**: Services MUST safely handle a termination signal that arrives before startup has completed.
+- **FR-023**: A repeated termination signal MUST trigger an immediate exit, and MUST NOT re-run the cleanup sequence.
 
-**結構化日誌**
+**Structured Logging**
 
-- **FR-024**: 所有日誌 MUST 以每筆可獨立解析的結構化格式輸出。
-- **FR-025**: 每筆日誌 MUST 包含時間戳、嚴重等級、服務名稱、服務版本、訊息與關聯識別碼欄位。
-- **FR-026**: 系統 MUST 提供在單一請求或工作單元的生命週期中傳遞關聯識別碼的機制，使該單元產生的所有日誌帶有相同識別碼。
-- **FR-027**: 當進入的請求未攜帶關聯識別碼時，系統 MUST 自行產生一個。
-- **FR-028**: 日誌等級 MUST 可透過設定調整，且低於設定等級的日誌 MUST NOT 被輸出。
-- **FR-029**: 錯誤日誌 MUST 包含錯誤分類與足以定位問題的上下文欄位。
-- **FR-030**: 日誌 MUST NOT 輸出敏感設定值。
+- **FR-024**: All logs MUST be emitted in a structured format where each entry parses independently.
+- **FR-025**: Every log entry MUST contain timestamp, severity level, service name, service version, message, and correlation identifier fields.
+- **FR-026**: The system MUST provide a mechanism for propagating a correlation identifier through the lifetime of a single request or unit of work, so that all logs from that unit carry the same identifier.
+- **FR-027**: When an incoming request carries no correlation identifier, the system MUST generate one.
+- **FR-028**: The log level MUST be adjustable through configuration, and entries below the configured level MUST NOT be emitted.
+- **FR-029**: Error logs MUST contain an error classification and enough context fields to locate the problem.
+- **FR-030**: Logs MUST NOT emit sensitive configuration values.
 
-**指標基礎**
+**Metrics Foundation**
 
-- **FR-031**: 兩個服務 MUST 各自提供 `/metrics` 端點，作為後續各 feature 註冊指標的共用出口。
-- **FR-032**: 本 feature MUST 建立共用的指標註冊機制，並至少輸出服務建置資訊與行程執行期指標；業務指標不在本 feature 範圍。
-- **FR-033**: 指標收集服務 MUST 被設定為自動抓取兩個服務的 `/metrics` 端點。
+- **FR-031**: Both services MUST each expose a `/metrics` endpoint as the shared outlet through which later features register their metrics.
+- **FR-032**: This feature MUST establish the shared metric registration mechanism and emit at minimum service build information and process runtime metrics. Business metrics are out of scope for this feature.
+- **FR-033**: The metrics collection service MUST be configured to scrape the `/metrics` endpoints of both services automatically.
 
-**自動化驗證**
+**Automated Verification**
 
-- **FR-034**: 系統 MUST 在變更提交時自動執行建置、靜態檢查與單元測試。
-- **FR-035**: 任一項自動檢查失敗 MUST 導致該次驗證回報失敗，並指出失敗的項目與位置。
-- **FR-036**: 自動化流程所執行的檢查 MUST 可由開發者在本機以單一指令完整重現。
+- **FR-034**: The system MUST automatically run build, static analysis, and unit tests when a change is submitted.
+- **FR-035**: Failure of any automated check MUST cause that verification run to report failure and identify the failing item and its location.
+- **FR-036**: The checks run by the automated pipeline MUST be fully reproducible by a developer locally through a single command.
 
 ### Key Entities
 
-- **服務設定 (Service Configuration)**：一組具名的設定項目，每項具備名稱、預設值、允許的格式或範圍，
-  以及是否為敏感值的標記。於啟動時整體驗證，通過後成為不可變的執行期設定。
-- **依賴健康狀態 (Dependency Health Status)**：單一外部依賴的檢查結果，包含依賴名稱、
-  健康與否、檢查耗時，以及失敗時的原因分類。
-- **就緒結果 (Readiness Result)**：一次就緒查詢的整體結論，由全部依賴健康狀態聚合而成，
-  包含整體狀態與逐項明細，並帶有結果產生時間以支援最小重新檢查間隔。
-- **日誌紀錄 (Log Record)**：一筆結構化事件，包含時間戳、嚴重等級、服務名稱、服務版本、
-  訊息、關聯識別碼，以及可選的錯誤分類與上下文欄位。
+- **Service Configuration**: a set of named settings, each with a name, a default, a permitted
+  format or range, and a flag marking whether it is sensitive. Validated as a whole at startup;
+  once validated it becomes immutable runtime configuration.
+- **Dependency Health Status**: the check result for a single external dependency, containing the
+  dependency name, whether it is healthy, how long the check took, and a failure reason
+  classification when unhealthy.
+- **Readiness Result**: the overall conclusion of one readiness query, aggregated from all
+  dependency health statuses. Contains the overall status and the per-dependency breakdown, plus
+  the time the result was produced so that the minimum re-check interval can be applied.
+- **Log Record**: one structured event containing timestamp, severity level, service name, service
+  version, message, correlation identifier, and optional error classification and context fields.
 
 ## Success Criteria *(mandatory)*
 
 ### Measurable Outcomes
 
-- **SC-001**: 一位先前未接觸本專案的開發者，在僅具備容器執行環境的機器上，能只靠專案文件、
-  執行一道指令，於 10 分鐘內讓全部服務進入就緒狀態，過程中無需人工介入或手動安裝支撐服務。
-- **SC-002**: 逐一停止三項依賴中的任一項，就緒訊號在 10 秒內轉為未就緒，且其回應正確指出
-  失敗的依賴，四種組合（單項失敗三種、全部失敗一種）測試通過率 100%。
-- **SC-003**: 在任一或全部外部依賴不可用的情況下，存活訊號維持成功，誤判次數為 0。
-- **SC-004**: 依賴恢復後，就緒訊號在 10 秒內自動回復為成功，且過程中未重啟服務。
-- **SC-005**: 針對「缺漏必填值」「格式錯誤」「超出允許範圍」三類設定錯誤，啟動階段攔截率 100%，
-  且每則錯誤訊息都能讓讀者不查閱原始碼即可判斷該修改哪一項設定。
-- **SC-006**: 服務收到終止訊號後，於設定的寬限時間內完成關閉的比率為 100%；
-  在關閉期間送達的請求，不會出現未回應即被切斷的情況。
-- **SC-007**: 隨機抽取 100 筆日誌輸出，可被結構化解析的比率為 100%，
-  且必要欄位（時間戳、等級、服務名稱、版本、訊息、關聯識別碼）齊全率為 100%。
-- **SC-008**: 同一次請求所產生的日誌，能僅憑關聯識別碼完整檢索出來，遺漏率為 0。
-- **SC-009**: 自動化驗證流程在提交後 5 分鐘內回報結果，且對刻意植入的編譯錯誤、
-  靜態檢查違規與失敗測試三類問題，攔截率各為 100%。
-- **SC-010**: 連續執行啟動與關閉指令 5 次，每次結果一致，無因殘留狀態導致的失敗。
+- **SC-001**: A developer with no prior exposure to this project, on a machine equipped only with a
+  container runtime, can bring every service to a ready state within 10 minutes using nothing but
+  the project documentation and a single command, with no manual intervention and no hand-installed
+  supporting services.
+- **SC-002**: Stopping any one of the three dependencies turns the readiness signal not-ready within
+  10 seconds, and its response correctly identifies the failing dependency. All four combinations
+  (three single failures, one total failure) pass at a rate of 100%.
+- **SC-003**: With any or all external dependencies unavailable, the liveness signal keeps
+  succeeding, with 0 false negatives.
+- **SC-004**: After a dependency recovers, the readiness signal returns to success automatically
+  within 10 seconds, with no service restart during the process.
+- **SC-005**: For the three classes of configuration error — missing required value, malformed
+  value, and value outside the permitted range — the startup-time interception rate is 100%, and
+  each error message lets a reader determine which setting to change without consulting the source
+  code.
+- **SC-006**: Services complete shutdown within the configured grace period 100% of the time; no
+  request arriving during shutdown is cut off without a response.
+- **SC-007**: Across a random sample of 100 log entries, 100% parse as structured records and 100%
+  carry all required fields (timestamp, level, service name, version, message, correlation
+  identifier).
+- **SC-008**: The logs produced by a single request can be retrieved completely using the
+  correlation identifier alone, with a miss rate of 0.
+- **SC-009**: The automated verification pipeline reports its result within 5 minutes of
+  submission, and intercepts each of the three deliberately injected problem classes — compilation
+  error, static analysis violation, and failing test — at a rate of 100%.
+- **SC-010**: Running the start and stop commands five times consecutively produces a consistent
+  result each time, with no failure caused by residual state.
 
 ## Assumptions
 
-以下為在描述未明確指定處所採用的合理預設，實作時如需偏離須在計畫階段說明理由。
+The following are the reasonable defaults chosen where the description did not specify. Departing
+from any of them during implementation requires justification at the planning stage.
 
-**技術選型（由專案憲章既定，非本 feature 的設計決策）**
+**Technology Choices (fixed by the project constitution, not decisions made by this feature)**
 
-- 服務以 Go 實作；事件串流使用 Kafka、分析儲存使用 ClickHouse、快取使用 Redis、
-  指標收集使用 Prometheus；本地環境以 Docker Compose 編排；自動化驗證使用 GitHub Actions。
-  上述選型出自 `.specify/memory/constitution.md` 的「技術與範圍限制」，本 feature 不重新評估。
+- Services are written in Go. Event streaming uses Kafka, analytical storage uses ClickHouse,
+  caching uses Redis, metrics collection uses Prometheus, the local environment is orchestrated with
+  Docker Compose, and automated verification uses GitHub Actions. These choices come from the
+  "Technology & Scope Constraints" section of `.specify/memory/constitution.md` and are not
+  re-evaluated here.
 
-**行為預設**
+**Behavioral Defaults**
 
-- 就緒探針的依賴檢查為輕量連線層級檢查（確認可建立連線並得到回應），不執行寫入或查詢資料。
-- 就緒探針的依賴檢查逾時預設為 2 秒，結果最小重新檢查間隔預設為 1 秒；兩者皆可透過設定調整。
-- 關閉寬限時間預設為 30 秒，可透過設定調整；此值需大於單一請求的預期處理時間。
-- 服務啟動時若依賴尚未就緒，服務仍成功啟動並回報未就緒，而非啟動失敗，
-  以容忍容器啟動的先後競態。
-- 關聯識別碼採用可與後續分散式追蹤相容的識別碼格式，使 F08 導入追蹤時無需變更日誌欄位語意。
-- 日誌預設輸出至標準輸出，由容器執行環境負責收集；本 feature 不處理日誌保存與轉送。
-- 本 feature 不建立任何持久化資料表結構；分析儲存服務僅需啟動並可連線。
-- 處理服務在本 feature 中不消費任何訊息，僅具備啟動、健康探針、設定、日誌與關閉能力。
+- Readiness dependency checks are lightweight connection-level checks (confirming a connection can
+  be established and answered); they do not write or read data.
+- The readiness dependency check timeout defaults to 2 seconds and the minimum result re-check
+  interval defaults to 1 second. Both are configurable.
+- The shutdown grace period defaults to 30 seconds and is configurable. It needs to exceed the
+  expected processing time of a single request.
+- If dependencies are not ready when a service starts, the service still starts successfully and
+  reports not-ready rather than failing to start, tolerating container startup ordering races.
+- The correlation identifier uses a format compatible with the distributed tracing introduced later,
+  so that F08 can adopt tracing without changing the semantics of the log field.
+- Logs are written to standard output by default, with collection left to the container runtime.
+  Log retention and forwarding are not handled by this feature.
+- This feature creates no persistent table schema. The analytical storage service only needs to
+  start and accept connections.
+- In this feature the processing service consumes no messages. It only needs startup, health probes,
+  configuration, logging, and shutdown.
 
-**範圍邊界**
+**Scope Boundaries**
 
-- 不包含任何業務邏輯：不含事件擷取端點、不含訊息消費、不含資料寫入或查詢。
-- 不包含 Kubernetes 部署設定（屬 F11）。
-- 不包含業務指標與分散式追蹤（屬 F08）；本 feature 僅建立指標出口與註冊機制。
-- 不包含身分驗證、授權與速率限制。
-- 不包含正式環境的部署、機密管理與 TLS 終止。
-- 整合測試在本 feature 中僅涵蓋「服務能連上支撐服務」的層級；
-  跨邊界的資料正確性測試由各自的 feature 負責。
+- No business logic: no ingestion endpoint, no message consumption, no data writes or queries.
+- No Kubernetes deployment configuration (that is F11).
+- No business metrics and no distributed tracing (that is F08). This feature only establishes the
+  metrics outlet and the registration mechanism.
+- No authentication, authorization, or rate limiting.
+- No production deployment, secret management, or TLS termination.
+- Integration testing in this feature covers only the "the service can connect to its supporting
+  services" level. Cross-boundary data correctness testing belongs to the features that own it.
 
 ## Dependencies
 
-- 無前置 feature 依賴。本 feature 為 `FEATURES.md` 中依賴圖的根節點。
-- 後續 feature F02（事件擷取 API）、F03（ClickHouse 分析儲存層）、F08（可觀測性）
-  皆建立在本 feature 提供的設定、日誌、健康探針與指標註冊機制之上。
-- 需要開發機器具備容器執行環境；本 feature 不負責安裝該環境，但須在文件中載明版本需求。
+- No prerequisite features. This is the root node of the dependency graph in `FEATURES.md`.
+- Later features F02 (Event Ingestion API), F03 (ClickHouse Analytical Store), and F08
+  (Observability) all build on the configuration, logging, health probe, and metric registration
+  mechanisms this feature provides.
+- Requires the developer's machine to have a container runtime. Installing that runtime is not this
+  feature's responsibility, but the documentation must state the required version.
