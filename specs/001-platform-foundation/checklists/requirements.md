@@ -1,4 +1,4 @@
-# Specification Quality Checklist: 平台基礎與本地開發環境 (Platform Foundation)
+# Specification Quality Checklist: Platform Foundation & Local Development Environment
 
 **Purpose**: Validate specification completeness and quality before proceeding to planning
 **Created**: 2026-08-26
@@ -31,42 +31,56 @@
 
 ## Validation Notes
 
-**驗證輪次**: 1（首輪即全數通過）
+**Validation iterations**: 1 (all items passed on the first pass)
 
-**統計**: 6 個 user story（P1×2、P2×2、P3×2）、9 項 edge case、36 條功能需求
-（FR-001～FR-036，編號連續無缺漏）、10 項成功標準（SC-001～SC-010）、
-0 個 `[NEEDS CLARIFICATION]` 標記。
+**Counts**: 6 user stories (2x P1, 2x P2, 2x P3), 9 edge cases, 36 functional requirements
+(FR-001 through FR-036, numbering continuous with no gaps), 10 success criteria
+(SC-001 through SC-010), 0 `[NEEDS CLARIFICATION]` markers.
 
-**「無實作細節」一項的判定依據**（本 feature 屬基礎建設，需說明）:
+**Basis for passing "no implementation details"** (worth stating, since this is an infrastructure
+feature):
 
-- 功能需求一律以能力與行為描述（「事件串流」「分析儲存」「快取」「指標收集」），
-  不指名具體產品。
-- 具體技術名稱僅出現在 Assumptions 的「技術選型」小節，且明確標示其來源為
-  `.specify/memory/constitution.md` 的既定限制，非本 spec 所作的設計決策。
-- 出現的路徑字串 `/v1/health/live`、`/v1/health/ready`、`/metrics` 為 README 已定義的
-  對外契約（API summary），屬使用者可見的介面約定而非內部實作細節，故保留。
+- Functional requirements describe capabilities and behavior throughout ("event streaming",
+  "analytical storage", "caching", "metrics collection") and never name a specific product.
+- Concrete technology names appear only in the "Technology Choices" subsection of Assumptions,
+  where they are explicitly attributed to the fixed constraints in
+  `.specify/memory/constitution.md` rather than presented as decisions this spec makes.
+- The path strings `/v1/health/live`, `/v1/health/ready`, and `/metrics` are external contracts
+  already defined in the README's API summary. They are user-visible interface agreements, not
+  internal implementation details, so they are retained.
 
-**「非技術利害關係人可讀」一項的判定依據**: 本 feature 的使用者本身即開發者與營運者，
-user story 以其工作情境（啟動環境、判讀健康訊號、除錯、提交變更）撰寫，
-不需具備 Go、Kafka 或容器編排知識即可理解每則情境要達成什麼。
+**Basis for passing "written for non-technical stakeholders"**: the users of this feature are
+themselves the developer and the operator. Each user story is written around their working
+situation — starting the environment, reading health signals, debugging, submitting changes — and
+understanding what each scenario is trying to achieve requires no knowledge of Go, Kafka, or
+container orchestration.
 
-**刻意未標記為待澄清、改以 Assumptions 記錄的取捨**（若不同意可執行 `/speckit.clarify` 調整）:
+**Trade-offs deliberately recorded as assumptions rather than flagged for clarification** (run
+`/speckit.clarify` to revisit any of these):
 
-1. 就緒探針採輕量連線層級檢查，不執行讀寫探測。
-2. 依賴檢查逾時 2 秒、結果最小重新檢查間隔 1 秒、關閉寬限時間 30 秒。
-3. 啟動時依賴尚未就緒時，服務仍成功啟動並回報未就緒，而非啟動失敗。
-4. 處理服務在本 feature 中同樣提供健康探針與 `/metrics`，但不消費任何訊息。
+1. Readiness probes perform lightweight connection-level checks, not read/write probing.
+2. Dependency check timeout of 2 seconds, minimum result re-check interval of 1 second, and a
+   shutdown grace period of 30 seconds.
+3. When dependencies are not yet ready at startup, the service still starts successfully and
+   reports not-ready, rather than failing to start.
+4. The processing service also exposes health probes and `/metrics` in this feature, but consumes
+   no messages.
 
-**憲章對照**（`/speckit.plan` 階段會再正式檢查一次）:
+**Constitution cross-check** (formally re-checked during `/speckit.plan`):
 
-- 原則 I 可觀測性優先 — FR-024～FR-033 建立日誌與指標基礎；本 feature 無業務處理路徑，
-  故僅需出口與註冊機制。
-- 原則 II 測試分層 — Assumptions 已界定本 feature 的整合測試僅涵蓋連線層級。
-- 原則 III 可重現的量測 — SC-001、SC-009、SC-010 皆為可重跑的驗證而非效能宣稱。
-- 原則 IV 至少一次交付與冪等 — 本 feature 無事件處理，不適用。
-- 原則 V 簡潔優先 — 範圍邊界已明列六項排除項目，未引入非必要元件。
+- Principle I, Observability First — FR-024 through FR-033 establish the logging and metrics
+  foundation. This feature has no business processing path, so only the outlet and registration
+  mechanism are required.
+- Principle II, Layered Testing — Assumptions bound this feature's integration testing to the
+  connection level.
+- Principle III, Reproducible Measurement — SC-001, SC-009, and SC-010 are repeatable verifications
+  rather than performance claims.
+- Principle IV, At-Least-Once Delivery and Idempotency — not applicable; this feature performs no
+  event processing.
+- Principle V, Simplicity First — the scope boundaries enumerate six explicit exclusions, and no
+  unnecessary component is introduced.
 
 ## Notes
 
 - Items marked incomplete require spec updates before `/speckit-clarify` or `/speckit-plan`
-- 本輪無未完成項目。
+- No incomplete items in this iteration.

@@ -1,0 +1,214 @@
+openapi: 3.1.0
+info:
+  title: PulseFlow Health & Metrics API
+  version: "1.0.0"
+  description: |
+    Operational endpoints exposed by both the PulseFlow ingestion service (`cmd/api`) and the
+    processing service (`cmd/worker`), introduced by feature 001-platform-foundation.
+
+    Two health signals with deliberately different meanings:
+
+    - `/v1/health/live` answers "is this process alive?" and drives restart decisions. It never
+      consults an external dependency, so a dependency outage cannot trigger a restart loop.
+    - `/v1/health/ready` answers "can this process serve correctly right now?" and drives traffic
+      routing. It reflects the availability of Kafka, ClickHouse, and Redis, and it reports
+      not-ready as soon as shutdown begins.
+
+    Neither endpoint requires authentication; both are intended for orchestrator probes on an
+    internal network.
+
+servers:
+  - url: http://localhost:8080
+    description: Ingestion service (local development)
+  - url: http://localhost:8081
+    description: Processing service (local development)
+
+paths:
+  /v1/health/live:
+    get:
+      summary: Liveness probe
+      description: |
+        Returns success whenever the process is running and able to serve HTTP. The result is
+        independent of every external dependency (FR-006). A non-200 response, or no response,
+        means the process should be restarted.
+      operationId: getLiveness
+      responses:
+        "200":
+          description: Process is alive.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/LivenessResponse"
+              example:
+                status: alive
+                service: pulseflow-api
+                version: 0.1.0
+
+  /v1/health/ready:
+    get:
+      summary: Dependency-aware readiness probe
+      description: |
+        Reports whether this process can serve correctly. The response lists **every** dependency
+        with its individual status, whether or not it is healthy (FR-008), so a single probe shows
+        the complete picture rather than only the first failure encountered.
+
+        Dependency checks are protocol-level (a Kafka metadata request, a ClickHouse ping, a Redis
+        PING), run concurrently, and are each bounded by `PULSEFLOW_HEALTH_CHECK_TIMEOUT`. Results
+        are cached for `PULSEFLOW_HEALTH_CACHE_TTL` and concurrent requests collapse into a single
+        check round, so probe frequency does not amplify load on the dependencies (FR-010).
+
+        Once a termination signal is received, this endpoint reports `not_ready` immediately and
+        unconditionally, before shutdown proceeds (FR-020).
+      operationId: getReadiness
+      responses:
+        "200":
+          description: All dependencies healthy and the process is not shutting down.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+              example:
+                status: ready
+                service: pulseflow-api
+                version: 0.1.0
+                evaluated_at: "2026-08-26T09:14:02.481Z"
+                dependencies:
+                  - name: kafka
+                    healthy: true
+                    duration_ms: 4
+                  - name: clickhouse
+                    healthy: true
+                    duration_ms: 2
+                  - name: redis
+                    healthy: true
+                    duration_ms: 1
+        "503":
+          description: |
+            At least one dependency is unavailable, or the process is shutting down. The
+            `dependencies` array still contains an entry for every dependency.
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/ReadinessResponse"
+              examples:
+                dependencyDown:
+                  summary: ClickHouse stopped
+                  value:
+                    status: not_ready
+                    service: pulseflow-api
+                    version: 0.1.0
+                    evaluated_at: "2026-08-26T09:15:31.902Z"
+                    dependencies:
+                      - name: kafka
+                        healthy: true
+                        duration_ms: 5
+                      - name: clickhouse
+                        healthy: false
+                        duration_ms: 2001
+                        reason: timeout
+                      - name: redis
+                        healthy: true
+                        duration_ms: 1
+                shuttingDown:
+                  summary: Termination signal received
+                  value:
+                    status: not_ready
+                    service: pulseflow-api
+                    version: 0.1.0
+                    evaluated_at: "2026-08-26T09:16:44.118Z"
+                    shutting_down: true
+                    dependencies:
+                      - name: kafka
+                        healthy: true
+                        duration_ms: 4
+                      - name: clickhouse
+                        healthy: true
+                        duration_ms: 2
+                      - name: redis
+                        healthy: true
+                        duration_ms: 1
+
+  /metrics:
+    get:
+      summary: Prometheus metrics
+      description: |
+        Prometheus text exposition of this process's metrics. In this feature the set is limited to
+        build information, Go runtime and process collectors, HTTP request metrics for the routes
+        above, and dependency check metrics. Later features register additional metrics into the
+        same registry — see `contracts/metrics.md`.
+      operationId: getMetrics
+      responses:
+        "200":
+          description: Metrics in Prometheus text exposition format.
+          content:
+            text/plain:
+              schema:
+                type: string
+
+components:
+  schemas:
+    LivenessResponse:
+      type: object
+      required: [status, service, version]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          const: alive
+        service:
+          type: string
+          description: Configured service name.
+        version:
+          type: string
+          description: Build version.
+
+    ReadinessResponse:
+      type: object
+      required: [status, service, version, evaluated_at, dependencies]
+      additionalProperties: false
+      properties:
+        status:
+          type: string
+          enum: [ready, not_ready]
+        service:
+          type: string
+        version:
+          type: string
+        evaluated_at:
+          type: string
+          format: date-time
+          description: |
+            When this result was produced. May be up to `PULSEFLOW_HEALTH_CACHE_TTL` older than the
+            request, because results are cached to bound load on dependencies.
+        shutting_down:
+          type: boolean
+          description: Present and true only while the process is shutting down.
+        dependencies:
+          type: array
+          minItems: 3
+          description: One entry per dependency, always complete regardless of individual status.
+          items:
+            $ref: "#/components/schemas/DependencyStatus"
+
+    DependencyStatus:
+      type: object
+      required: [name, healthy, duration_ms]
+      additionalProperties: false
+      properties:
+        name:
+          type: string
+          enum: [kafka, clickhouse, redis]
+        healthy:
+          type: boolean
+        duration_ms:
+          type: integer
+          minimum: 0
+          description: Wall time of the check, including any timeout.
+        reason:
+          type: string
+          enum: [timeout, connection_refused, auth_failed, protocol_error, unknown]
+          description: |
+            Present only when `healthy` is false. A bounded classification, never raw driver error
+            text — driver errors routinely embed hosts, ports, and sometimes credentials, and this
+            response is served over HTTP (FR-012). The underlying error is written to the logs
+            instead, under the `dependency_check_failed` event.
